@@ -60,7 +60,6 @@ public final class ChatBlockPanel {
     private static final double SCROLL_STEP = 16.0D;
 
     private static final int COL_PANEL_BG = 0xF0101010;
-    private static final int COL_PANEL_BORDER = 0xFF3A3A3A;
     private static final int COL_ROW_HOVER = 0x33FFFFFF;
     private static final int COL_ROW_SELECTED = 0x2A2ECC71;
     private static final int COL_TEXT = 0xFFDDDDDD;
@@ -490,7 +489,6 @@ public final class ChatBlockPanel {
 
     private void drawPanels(DrawContext context, int mouseX, int mouseY) {
         context.fill(this.px, this.py, this.px + this.pw, this.py + this.ph, COL_PANEL_BG);
-        context.drawBorder(this.px, this.py, this.pw, this.ph, COL_PANEL_BORDER);
 
         context.drawText(this.textRenderer, this.title(), this.px + 6, this.py + 8, 0xFFFFFFFF, false);
 
@@ -1040,7 +1038,6 @@ public final class ChatBlockPanel {
         BlockState state = this.selectedStates.getOrDefault(block, block.getDefaultState());
 
         context.fill(this.px, this.py, this.px + this.pw, this.py + this.ph, COL_PANEL_BG);
-        context.drawBorder(this.px, this.py, this.pw, this.ph, COL_PANEL_BORDER);
 
         context.drawText(this.textRenderer, Text.translatable("wes.state.title", block.getName()),
                 this.px + 6, this.py + 8, 0xFFFFFFFF, false);
