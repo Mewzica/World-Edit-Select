@@ -1,61 +1,129 @@
 package dev.wes.mixin;
 
+import dev.wes.chat.ChatPanelHolder;
 import dev.wes.chat.ChatTrigger;
+import dev.wes.gui.ChatBlockPanel;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * 混入 {@link ChatScreen}，在玩家打字时嗅探输入框内容。
+ * 混入 {@link ChatScreen}：把方块选择面板挂在聊天界面上。
  *
- * <h2>为什么不能只混 keyPressed</h2>
- * <p>1.20.1 的字符输入<b>不</b>走 {@code keyPressed}：普通字符是
- * {@code Keyboard#onChar} → {@code Element#charTyped} → {@code TextFieldWidget#charTyped}
- * 这条链路，空格（0x20）也是走 charTyped 的。</p>
- * <p>而且 {@code ChatScreen} 在 1.20.1 里<b>并没有重写 charTyped</b>
- * （javap 可见它只重写了 init / keyPressed / mouseClicked / mouseScrolled / render），
- * 所以往 {@code ChatScreen#charTyped} 上注入会直接「找不到方法」而崩游戏。</p>
- * <p>结论：真正可靠的挂载点是 {@link TextFieldWidgetMixin}（监听文本变化），
- * 这个类只负责两件事：回车兜底、以及粘贴/输入法上屏后的二次确认。</p>
+ * <h2>为什么不用 Screen 切换</h2>
+ * <p>面板是聊天界面里的浮层（{@link ChatBlockPanel}），所以这里只做四件事：
+ * 渲染转发、鼠标转发、按键转发、窗口尺寸变化后重新摆位。</p>
+ *
+ * <h2>为什么字符输入不用管</h2>
+ * <p>1.20.1 的 {@code ChatScreen} 没有重写 {@code charTyped}，而 {@code Screen}
+ * 从 {@code ParentElement} 继承来的默认实现是「转发给当前焦点控件」。
+ * 面板里的输入框只要用 {@code setFocused} 拿到焦点，打字就会自动进去，
+ * 不需要再混入字符输入（那个方法在 ChatScreen 上根本不存在，注入了会崩）。</p>
  */
 @Mixin(ChatScreen.class)
-public abstract class ChatScreenMixin {
+public abstract class ChatScreenMixin implements ChatPanelHolder {
 
-    /** 原版聊天输入框，1.20.1 里是 {@code protected TextFieldWidget chatField}。 */
     @Shadow
     protected TextFieldWidget chatField;
 
-    /**
-     * 回车兜底。
-     *
-     * <p>正常流程下，玩家敲完那个空格时界面就已经被切走了，这条永远不会命中。
-     * 但如果玩家用「粘贴 → 立刻回车」的极速操作，或者别的模组延迟了文本变化事件，
-     * 这里可以拦住它，避免把半截 {@code //set } 当命令发给服务器。</p>
-     */
-    @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
-    private void wes$guardEnterKey(int keyCode, int scanCode, int modifiers,
-                                   CallbackInfoReturnable<Boolean> cir) {
-        if (keyCode != GLFW.GLFW_KEY_ENTER && keyCode != GLFW.GLFW_KEY_KP_ENTER) {
-            return;
+    @Unique
+    private ChatBlockPanel wes$panel;
+
+    /* ============================ 面板持有 ============================ */
+
+    @Override
+    public ChatBlockPanel wes$panel() {
+        if (this.wes$panel == null) {
+            // textRenderer 是 Screen 的字段，不是 ChatScreen 自己的：
+            // 用 @Shadow 会触发 "Cannot find target for @Shadow field"（AP 只查目标类本身），
+            // 运行期拿不到映射就会崩，所以直接从客户端实例取。
+            this.wes$panel = new ChatBlockPanel((ChatScreen) (Object) this,
+                    MinecraftClient.getInstance().textRenderer, this.chatField);
         }
-        if (!ChatTrigger.TRIGGER.equals(this.chatField.getText())) {
-            return;
+        return this.wes$panel;
+    }
+
+    @Override
+    public void wes$openPanel() {
+        this.wes$panel().open();
+    }
+
+    @Override
+    public boolean wes$isPanelOpen() {
+        return this.wes$panel != null && this.wes$panel.isOpen();
+    }
+
+    /* ============================ 注入点 ============================ */
+
+    /** 窗口尺寸变化会重建 chatField，面板要跟着重新摆位。 */
+    @Inject(method = "init", at = @At("TAIL"))
+    private void wes$onInit(CallbackInfo ci) {
+        if (this.wes$panel != null) {
+            this.wes$panel.onResize(this.chatField);
         }
-        // 先尝试开界面，再把原版回车「吃掉」
-        ChatTrigger.check((ChatScreen) (Object) this, this.chatField.getText());
-        cir.setReturnValue(true);
     }
 
     /**
-     * 按键处理完之后再看一眼。
-     *
-     * <p>覆盖 Ctrl+V 粘贴、以及某些输入法把整段文本一次性塞进来的情况。</p>
+     * 画在最后：此时聊天输入框和它的补全提示都已经画完了，
+     * 面板铺在它们上方，而底部的输入行仍然露出来。
      */
+    @Inject(method = "render", at = @At("TAIL"))
+    private void wes$onRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (this.wes$panel != null && this.wes$panel.isOpen()) {
+            this.wes$panel.render(context, mouseX, mouseY, delta);
+        }
+    }
+
+    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
+    private void wes$onMouseClicked(double mouseX, double mouseY, int button,
+                                    CallbackInfoReturnable<Boolean> cir) {
+        if (this.wes$panel == null || !this.wes$panel.isOpen()) {
+            return;
+        }
+        if (this.wes$panel.mouseClicked(mouseX, mouseY, button)) {
+            cir.setReturnValue(true);
+        } else if (!this.wes$panel.contains(mouseX, mouseY)) {
+            // 点在面板外面：收起面板，让原版逻辑继续（比如点别处关掉聊天）
+            this.wes$panel.close();
+        }
+    }
+
+    @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
+    private void wes$onMouseScrolled(double mouseX, double mouseY, double amount,
+                                     CallbackInfoReturnable<Boolean> cir) {
+        if (this.wes$panel != null && this.wes$panel.mouseScrolled(mouseX, mouseY, amount)) {
+            cir.setReturnValue(true);
+        }
+    }
+
+    @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
+    private void wes$onKeyPressed(int keyCode, int scanCode, int modifiers,
+                                  CallbackInfoReturnable<Boolean> cir) {
+        if (this.wes$panel != null && this.wes$panel.isOpen()) {
+            if (this.wes$panel.keyPressed(keyCode, scanCode, modifiers)) {
+                cir.setReturnValue(true);
+            }
+            return;
+        }
+
+        // 面板没开时的兜底：文本已经是 "//set " 又按了回车，别把它当命令发出去
+        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+                && ChatTrigger.TRIGGER.equals(this.chatField.getText())) {
+            ChatTrigger.check((ChatScreen) (Object) this, this.chatField.getText());
+            cir.setReturnValue(true);
+        }
+    }
+
+    /** 按键处理完再看一眼，覆盖 Ctrl+V 粘贴等一次性写入的情况。 */
     @Inject(method = "keyPressed", at = @At("RETURN"))
     private void wes$afterKeyPressed(int keyCode, int scanCode, int modifiers,
                                      CallbackInfoReturnable<Boolean> cir) {
