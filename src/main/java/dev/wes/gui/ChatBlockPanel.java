@@ -1,5 +1,6 @@
 package dev.wes.gui;
 
+import dev.wes.command.BlockCommand;
 import dev.wes.worldedit.BlockCatalog;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -40,7 +41,8 @@ import java.util.Map;
  *       不需要自己重写字符输入（1.20.1 的 ChatScreen 也没有 charTyped 可以混入）。</li>
  * </ul>
  *
- * <p>确认时不会发送任何东西，只把 {@code //set 50%minecraft:stone,...} 写回聊天输入框，
+ * <p>确认时不会发送任何东西，只把拼好的指令（例如 {@code //set 50%minecraft:stone,...}
+ * 或 {@code //replace minecraft:dirt 50%minecraft:stone,...}）写回聊天输入框，
  * 玩家自己看一眼再按回车，仍然可以继续手改。</p>
  */
 public final class ChatBlockPanel {
@@ -50,8 +52,10 @@ public final class ChatBlockPanel {
     private static final int ROW_H = 20;
     private static final int SEL_ROW_H = 24;
     private static final int FIELD_W = 38;
+    /** 附加参数框比百分比框宽一点：半径要放得下 {@code 3,5,7} 这种椭球写法。 */
+    private static final int EXTRA_W = 54;
     private static final int FIELD_H = 16;
-    private static final int STATE_BTN_W = 16;
+    private static final int STATE_BTN_W = 18;
     private static final int PROP_ROW_H = 18;
     private static final double SCROLL_STEP = 16.0D;
 
@@ -90,10 +94,24 @@ public final class ChatBlockPanel {
     private TextFieldWidget searchField;
     private ButtonWidget confirmButton;
     private ButtonWidget cancelButton;
+    /** //replace 的「被替换方块」选择按钮（只有 replace 才有）。 */
+    private ButtonWidget sourceButton;
+    /** 附加参数输入框：厚度 / 半径 / 高度 / 尺寸 / 密度，按指令决定有没有。 */
+    private TextFieldWidget extra1Field;
+    private TextFieldWidget extra2Field;
+
+    /** 本次打开面板对应的指令，确认时按它的签名拼指令。 */
+    private BlockCommand command = BlockCommand.SET;
+    /** //replace 的源方块；null 表示还没选。 */
+    private Block sourceBlock;
+    /** true 表示下一次点左侧列表是「选源方块」而不是「加入图案」。 */
+    private boolean pickingSource;
 
     private boolean open;
     private String query = "";
     private String statusMessage = "";
+    /** 本帧要画的悬停提示（目前只有「态」按钮用），null 表示没有。 */
+    private Text hoverTip;
     private double listScroll;
     private double selScroll;
 
@@ -102,6 +120,13 @@ public final class ChatBlockPanel {
     private int px, py, pw, ph;
     private int listX, listY, listW, listH;
     private int selX, selY, selW, selH;
+
+    /* 参数行（只在指令需要额外参数时才占高度） */
+    private static final int OPT_H = 18;
+    private int optY;
+    private int sourceBtnX, sourceBtnW;
+    private int extra1LabelX, extra1X, extra2LabelX, extra2X;
+    private Text extra1Label, extra2Label;
 
     public ChatBlockPanel(ChatScreen screen, TextRenderer textRenderer, TextFieldWidget chatField) {
         this.screen = screen;
@@ -116,13 +141,19 @@ public final class ChatBlockPanel {
 
     /* ============================== 开关 ============================== */
 
-    public void open() {
+    /**
+     * 按指定指令打开面板。
+     *
+     * @param command 触发面板的那条 WorldEdit 指令，决定面板上要显示哪些参数框
+     */
+    public void open(BlockCommand command) {
         if (this.open) {
             return;
         }
         if (this.allBlocks.isEmpty()) {
             this.allBlocks.addAll(BlockCatalog.collectAll());
         }
+        this.command = command == null ? BlockCommand.SET : command;
         this.open = true;
         this.statusMessage = "";
         this.query = "";
@@ -130,6 +161,8 @@ public final class ChatBlockPanel {
         this.selScroll = 0.0D;
         this.stateEditing = null;
         this.propScroll = 0.0D;
+        this.sourceBlock = null;
+        this.pickingSource = false;
         // 把残留的 "//set " 清掉：面板开着的时候这半截指令没有任何意义，
         // 万一玩家直接按回车还会发给服务器。
         this.chatField.setText("");
@@ -144,9 +177,13 @@ public final class ChatBlockPanel {
         }
         this.open = false;
         this.stateEditing = null;
+        this.pickingSource = false;
         this.searchField = null;
         this.confirmButton = null;
         this.cancelButton = null;
+        this.sourceButton = null;
+        this.extra1Field = null;
+        this.extra2Field = null;
         this.percentWidgets.clear();
         this.percentOrder.clear();
         this.setFocus(this.chatField); // 焦点还给聊天输入框，玩家可以接着打字
@@ -159,10 +196,38 @@ public final class ChatBlockPanel {
             return;
         }
         TextFieldWidget focused = this.parent.getFocused() instanceof TextFieldWidget f ? f : null;
+        String[] extras = this.captureExtras();
         this.computeLayout();
         this.buildWidgets();
+        this.restoreExtras(extras);
         if (focused != null) {
             this.setFocus(this.searchField);
+        }
+    }
+
+    /**
+     * 重建控件前把用户填的附加参数抄下来。
+     *
+     * <p>{@link #buildWidgets()} 是「全量重建」，附加参数框会被重新填成默认值；
+     * 而「加/减一个方块」也会触发重建，如果不抄一份，玩家填好的半径、厚度
+     * 在点一下左侧列表后就没了。</p>
+     */
+    private String[] captureExtras() {
+        return new String[]{
+                this.extra1Field == null ? null : this.extra1Field.getText(),
+                this.extra2Field == null ? null : this.extra2Field.getText()
+        };
+    }
+
+    private void restoreExtras(String[] saved) {
+        if (saved == null) {
+            return;
+        }
+        if (this.extra1Field != null && saved[0] != null) {
+            this.extra1Field.setText(saved[0]);
+        }
+        if (this.extra2Field != null && saved[1] != null) {
+            this.extra2Field.setText(saved[1]);
         }
     }
 
@@ -176,25 +241,71 @@ public final class ChatBlockPanel {
         this.py = 4;
         this.ph = MathHelper.clamp(Math.round(this.screen.height * 0.68F), 150, 260);
 
-        int top = this.py + 24;              // 标题占掉上面 24px，搜索框从这里开始
+        // 标题行占 20px；只有 //replace / //line / //sphere 这类需要额外参数的指令
+        // 才多留一行参数行，//set、//walls 这些保持原来的紧凑布局。
+        int titleBottom = this.py + 22;
+        this.optY = titleBottom;
+        int contentTop = titleBottom + (hasOptions() ? OPT_H + 2 : 0);
+
+        int searchY = contentTop + 2;
         int bottom = this.py + this.ph - 30; // 底部留给按钮
         int innerW = this.pw - 18;
 
         this.listX = this.px + 6;
         this.listW = Math.max(120, innerW * 58 / 100);
-        this.listY = top + 20;               // 搜索框高 16 + 4 间距
-        this.listH = Math.max(40, bottom - this.listY);
+        this.listY = searchY + 20;           // 搜索框高 16 + 4 间距
+        this.listH = Math.max(30, bottom - this.listY);
 
         this.selX = this.listX + this.listW + 6;
         this.selW = Math.max(100, this.px + this.pw - 6 - this.selX);
         this.selY = this.listY;
         this.selH = this.listH;
+
+        // 参数行内部按需从左往右排：源方块按钮 → 参数1 → 参数2
+        int x = this.px + 6;
+        this.sourceBtnX = x;
+        this.sourceBtnW = 0;
+        if (this.command.needsSource()) {
+            this.sourceBtnW = 150;
+            x += this.sourceBtnW + 10;
+        }
+        this.extra1Label = this.command.extra1Lang() == null ? null : Text.translatable(this.command.extra1Lang());
+        this.extra1LabelX = x;
+        this.extra1X = x;
+        if (this.extra1Label != null) {
+            this.extra1X = x + this.textRenderer.getWidth(this.extra1Label) + 4;
+            x = this.extra1X + EXTRA_W + 14;
+        }
+        this.extra2Label = this.command.extra2Lang() == null ? null : Text.translatable(this.command.extra2Lang());
+        this.extra2LabelX = x;
+        this.extra2X = x;
+        if (this.extra2Label != null) {
+            this.extra2X = x + this.textRenderer.getWidth(this.extra2Label) + 4;
+        }
+    }
+
+    /** 这条指令是否需要一行额外的参数控件。 */
+    private boolean hasOptions() {
+        return this.command.needsSource() || this.command.extra1Lang() != null;
     }
 
     private void buildWidgets() {
         this.setFocus(null);
         this.percentWidgets.clear();
         this.percentOrder.clear();
+        this.sourceButton = null;
+        this.extra1Field = null;
+        this.extra2Field = null;
+
+        // 参数行：源方块按钮 + 数字输入框，按当前指令的签名决定建哪几个
+        if (this.command.needsSource()) {
+            this.sourceButton = ButtonWidget.builder(this.sourceLabel(), b -> {
+                this.pickingSource = !this.pickingSource;
+                b.setMessage(this.sourceLabel());
+            }).dimensions(this.sourceBtnX, this.optY, this.sourceBtnW, 16).build();
+        }
+        this.extra1Field = this.makeExtraField(this.extra1X, this.command.extra1Default(), this.command.extra1List());
+        this.extra2Field = this.makeExtraField(this.extra2X, this.command.extra2Default(), false);
 
         this.searchField = new TextFieldWidget(this.textRenderer,
                 this.listX, this.listY - 20, this.listW, 16, Text.translatable("wes.search"));
@@ -237,6 +348,33 @@ public final class ChatBlockPanel {
 
         this.applyFilter(this.query);
         this.layoutWidgets();
+    }
+
+    /**
+     * 建一个「纯数字」的附加参数输入框。
+     *
+     * @param defaultValue null 表示这条指令不需要这个参数，直接不建
+     * @param allowList    true 时允许逗号（{@code //sphere} 的椭球半径 {@code 3,5,7}）
+     */
+    private TextFieldWidget makeExtraField(int x, String defaultValue, boolean allowList) {
+        if (defaultValue == null) {
+            return null;
+        }
+        TextFieldWidget field = new TextFieldWidget(this.textRenderer, x, this.optY, EXTRA_W, FIELD_H, Text.literal(""));
+        field.setMaxLength(11);
+        field.setTextPredicate(text -> text.isEmpty() || text.matches(allowList ? "[0-9,]{1,11}" : "[0-9]{1,3}"));
+        field.setText(defaultValue);
+        field.setChangedListener(text -> this.statusMessage = "");
+        return field;
+    }
+
+    /** //replace 那个按钮上显示的文字：没选 / 正在选 / 已选方块名。 */
+    private Text sourceLabel() {
+        if (this.sourceBlock == null) {
+            return Text.translatable(this.pickingSource ? "wes.source.picking" : "wes.source.none");
+        }
+        Text label = Text.translatable("wes.source", this.sourceBlock.getName());
+        return this.pickingSource ? label.copy().formatted(Formatting.YELLOW) : label;
     }
 
     private void applyFilter(String text) {
@@ -290,7 +428,19 @@ public final class ChatBlockPanel {
             return;
         }
 
+        this.hoverTip = null;
         this.drawPanels(context, mouseX, mouseY);
+
+        // 参数行控件（同样没注册进 Screen，手动画）
+        if (this.sourceButton != null) {
+            this.sourceButton.render(context, mouseX, mouseY, delta);
+        }
+        if (this.extra1Field != null) {
+            this.extra1Field.render(context, mouseX, mouseY, delta);
+        }
+        if (this.extra2Field != null) {
+            this.extra2Field.render(context, mouseX, mouseY, delta);
+        }
 
         // 控件自己不会渲染（没注册进 Screen），这里按顺序手动画
         if (this.searchField != null) {
@@ -312,6 +462,30 @@ public final class ChatBlockPanel {
         if (this.cancelButton != null) {
             this.cancelButton.render(context, mouseX, mouseY, delta);
         }
+
+        if (this.hoverTip != null) {
+            context.drawTooltip(this.textRenderer, this.hoverTip, mouseX, mouseY);
+        }
+    }
+
+    /**
+     * 画「方块状态」按钮：三根滑杆的图标，用 fill 手绘。
+     *
+     * <p>之前这里是一个「态」字，CJK 字形在 16px 的框里又挤又偏下，
+     * 而且英文环境下没意义。手绘图标不受字体影响，尺寸也精确可控。</p>
+     */
+    private static void drawStateButton(DrawContext context, int x, int y, boolean hovered) {
+        context.fill(x, y, x + STATE_BTN_W, y + 16, hovered ? 0xFF3F6B4A : 0xFF2A2A2A);
+        context.drawBorder(x, y, STATE_BTN_W, 16, hovered ? 0xFF9BE3AE : 0xFF555555);
+
+        int left = x + 4;
+        int width = STATE_BTN_W - 8;
+        for (int i = 0; i < 3; i++) {
+            int lineY = y + 4 + i * 4;
+            context.fill(left, lineY, left + width, lineY + 1, 0xFF9A9A9A);
+            int knobX = left + (i == 0 ? 1 : i == 1 ? 6 : 3);
+            context.fill(knobX, lineY - 1, knobX + 2, lineY + 2, 0xFFE8E8E8);
+        }
     }
 
     private void drawPanels(DrawContext context, int mouseX, int mouseY) {
@@ -319,9 +493,26 @@ public final class ChatBlockPanel {
         context.drawBorder(this.px, this.py, this.pw, this.ph, COL_PANEL_BORDER);
 
         context.drawText(this.textRenderer, this.title(), this.px + 6, this.py + 8, 0xFFFFFFFF, false);
+
+        // 右上角标出这次触发的是哪条指令（//set、//replace、//sphere …），
+        // 免得玩家在面板里选了半天才发现指令不是自己想要的。
+        String cmd = this.command.trigger().trim();
+        context.drawText(this.textRenderer, cmd,
+                this.px + this.pw - 6 - this.textRenderer.getWidth(cmd), this.py + 8, COL_TEXT_SELECTED, false);
+
         context.drawText(this.textRenderer,
                 Text.translatable("wes.selected", this.selectedBlocks.size()),
                 this.selX, this.listY - 16, COL_TEXT_DIM, false);
+
+        // 参数行的文字标签（输入框和按钮自己会画）
+        if (this.extra1Label != null) {
+            context.drawText(this.textRenderer, this.extra1Label,
+                    this.extra1LabelX, this.optY + 4, COL_TEXT, false);
+        }
+        if (this.extra2Label != null) {
+            context.drawText(this.textRenderer, this.extra2Label,
+                    this.extra2LabelX, this.optY + 4, COL_TEXT, false);
+        }
 
         this.drawBlockList(context, mouseX, mouseY);
         this.drawSelectedList(context, mouseX, mouseY);
@@ -330,6 +521,9 @@ public final class ChatBlockPanel {
         if (!this.statusMessage.isEmpty()) {
             context.drawText(this.textRenderer, Text.literal(this.statusMessage),
                     this.px + 6, this.py + this.ph - 20, COL_ERROR, false);
+        } else if (this.pickingSource) {
+            context.drawText(this.textRenderer, Text.translatable("wes.hint.source"),
+                    this.px + 6, this.py + this.ph - 20, 0xFFFFD479, false);
         } else {
             context.drawText(this.textRenderer, Text.translatable("wes.hint"),
                     this.px + 6, this.py + this.ph - 20, COL_TEXT_DIM, false);
@@ -358,11 +552,15 @@ public final class ChatBlockPanel {
             } else if (chosen) {
                 context.fill(this.listX, y, this.listX + this.listW, y + ROW_H - 1, COL_ROW_SELECTED);
             }
+            // 当前 //replace 的源方块：左侧一条黄边标出来
+            if (block == this.sourceBlock) {
+                context.fill(this.listX, y, this.listX + 2, y + ROW_H - 1, 0xFFFFD479);
+            }
 
             context.drawItem(new ItemStack(block), this.listX + 2, y + 2);
             String name = this.textRenderer.trimToWidth(block.getName().getString(), this.listW - 26);
-            context.drawText(this.textRenderer, name, this.listX + 22, y + 6,
-                    chosen ? COL_TEXT_SELECTED : COL_TEXT, false);
+            int color = block == this.sourceBlock ? 0xFFFFD479 : chosen ? COL_TEXT_SELECTED : COL_TEXT;
+            context.drawText(this.textRenderer, name, this.listX + 22, y + 6, color, false);
         }
 
         context.disableScissor();
@@ -396,10 +594,10 @@ public final class ChatBlockPanel {
                 int bx = this.stateButtonX();
                 int by = y + 4;
                 boolean hover = isInside(mouseX, mouseY, bx, by, STATE_BTN_W, 16);
-                context.fill(bx, by, bx + STATE_BTN_W, by + 16, hover ? 0xFF3F6B4A : 0xFF2A2A2A);
-                context.drawBorder(bx, by, STATE_BTN_W, 16, 0xFF555555);
-                context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("wes.state"),
-                        bx + STATE_BTN_W / 2, by + 4, 0xFFCCCCCC);
+                drawStateButton(context, bx, by, hover);
+                if (hover) {
+                    this.hoverTip = Text.translatable("wes.state.button");
+                }
             }
         }
 
@@ -444,6 +642,17 @@ public final class ChatBlockPanel {
         }
 
         // 1) 控件优先：输入框先设焦点再转发点击（这样光标位置才算得准）
+        if (this.sourceButton != null && this.sourceButton.mouseClicked(mouseX, mouseY, button)) {
+            return true; // ButtonWidget 内部已经切了 pickingSource
+        }
+        if (this.extra1Field != null && this.extra1Field.mouseClicked(mouseX, mouseY, button)) {
+            this.setFocus(this.extra1Field);
+            return true;
+        }
+        if (this.extra2Field != null && this.extra2Field.mouseClicked(mouseX, mouseY, button)) {
+            this.setFocus(this.extra2Field);
+            return true;
+        }
         if (this.searchField != null && this.searchField.mouseClicked(mouseX, mouseY, button)) {
             this.setFocus(this.searchField);
             return true;
@@ -461,11 +670,21 @@ public final class ChatBlockPanel {
             return true;
         }
 
-        // 2) 左侧列表：加入 / 移出
+        // 2) 左侧列表：加入 / 移出（replace 正在选源方块时则是「设为源」）
         if (isInside(mouseX, mouseY, this.listX, this.listY, this.listW, this.listH)) {
             int index = (int) ((mouseY - this.listY + this.listScroll) / ROW_H);
             if (index >= 0 && index < this.filtered.size()) {
-                this.toggle(this.filtered.get(index));
+                Block block = this.filtered.get(index);
+                if (this.pickingSource) {
+                    this.sourceBlock = block;
+                    this.pickingSource = false;
+                    if (this.sourceButton != null) {
+                        this.sourceButton.setMessage(this.sourceLabel());
+                    }
+                    this.statusMessage = "";
+                    return true;
+                }
+                this.toggle(block);
             }
             return true;
         }
@@ -587,7 +806,9 @@ public final class ChatBlockPanel {
             }
         }
 
+        String[] extras = this.captureExtras();
         this.buildWidgets();
+        this.restoreExtras(extras);
 
         if (focusedBlock != null) {
             int index = this.percentOrder.indexOf(focusedBlock);
@@ -602,14 +823,27 @@ public final class ChatBlockPanel {
     }
 
     /**
-     * 确认：补齐百分比 → 拼指令 → 写回聊天输入框。
+     * 确认：补齐百分比 → 按当前指令的签名拼指令 → 写回聊天输入框。
      *
-     * <p>规则：填了数字的照用；留空的均分剩余（余数从前往后 +1）；
+     * <p>百分比规则：填了数字的照用；留空的均分剩余（余数从前往后 +1）；
      * 总和超过 100 直接报错。</p>
+     *
+     * <p>参数顺序按 {@link BlockCommand} 描述的真实签名来，例如：</p>
+     * <ul>
+     *   <li>{@code //set <pattern>}</li>
+     *   <li>{@code //replace <from> <pattern>}</li>
+     *   <li>{@code //hollow <thickness> <pattern>}（参数在前）</li>
+     *   <li>{@code //cyl <pattern> <radius> [height]}</li>
+     * </ul>
      */
     private void confirm() {
         if (this.selectedBlocks.isEmpty()) {
             this.statusMessage = Text.translatable("wes.err.empty").getString();
+            return;
+        }
+        // //replace 必须先知道要替换掉什么，否则拼出来是残废指令
+        if (this.command.needsSource() && this.sourceBlock == null) {
+            this.statusMessage = Text.translatable("wes.err.source").getString();
             return;
         }
 
@@ -677,7 +911,30 @@ public final class ChatBlockPanel {
             body = builder.toString();
         }
 
-        String result = "//set " + body;
+        // 按指令签名拼参数：replace 的 <from> 永远在最前；hollow 的厚度在图案前；
+        // 其余（line / sphere / cyl / pyramid / forest）参数都在图案后面。
+        List<String> args = new ArrayList<>();
+        if (this.command.needsSource()) {
+            args.add(Registries.BLOCK.getId(this.sourceBlock).toString());
+        }
+        String extra1 = readNumber(this.extra1Field);
+        String extra2 = readNumber(this.extra2Field);
+        if (this.command.extraFirst()) {
+            if (extra1 != null) {
+                args.add(extra1);
+            }
+            args.add(body);
+        } else {
+            args.add(body);
+            if (extra1 != null) {
+                args.add(extra1);
+            }
+        }
+        if (extra2 != null) {
+            args.add(extra2);
+        }
+
+        String result = "//" + this.command.id() + " " + String.join(" ", args);
         if (result.length() > 240) {
             this.statusMessage = Text.translatable("wes.err.long", result.length()).getString();
             return;
@@ -687,6 +944,15 @@ public final class ChatBlockPanel {
         this.chatField.setText(result);
         this.chatField.setCursorToEnd();
         this.close();
+    }
+
+    /** 读一个可选数字参数；空串当作「没填」，拼指令时整段省略。 */
+    private static String readNumber(TextFieldWidget field) {
+        if (field == null) {
+            return null;
+        }
+        String text = field.getText().trim();
+        return text.isEmpty() ? null : text;
     }
 
     private int readPercent(int index) {

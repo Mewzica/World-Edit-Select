@@ -1,5 +1,6 @@
 package dev.wes.chat;
 
+import dev.wes.command.BlockCommand;
 import dev.wes.gui.ChatBlockPanel;
 
 /**
@@ -14,8 +15,8 @@ public interface ChatPanelHolder {
     /** @return 当前聊天界面的面板实例（可能尚未创建，也返回非 null） */
     ChatBlockPanel wes$panel();
 
-    /** 打开面板（已打开则忽略）。 */
-    void wes$openPanel();
+    /** 按指定指令打开面板（已打开则忽略）。 */
+    void wes$openPanel(BlockCommand command);
 
     /** @return 面板是否正开着 */
     boolean wes$isPanelOpen();

@@ -2,6 +2,7 @@ package dev.wes.mixin;
 
 import dev.wes.chat.ChatPanelHolder;
 import dev.wes.chat.ChatTrigger;
+import dev.wes.command.BlockCommand;
 import dev.wes.gui.ChatBlockPanel;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -53,8 +54,8 @@ public abstract class ChatScreenMixin implements ChatPanelHolder {
     }
 
     @Override
-    public void wes$openPanel() {
-        this.wes$panel().open();
+    public void wes$openPanel(BlockCommand command) {
+        this.wes$panel().open(command);
     }
 
     @Override
@@ -115,9 +116,10 @@ public abstract class ChatScreenMixin implements ChatPanelHolder {
             return;
         }
 
-        // 面板没开时的兜底：文本已经是 "//set " 又按了回车，别把它当命令发出去
+        // 面板没开时的兜底：文本正好停在 "//set " / "//replace " / ... 又按了回车，
+        // 别把这半截指令当命令发出去，改成打开面板。
         if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
-                && ChatTrigger.TRIGGER.equals(this.chatField.getText())) {
+                && ChatTrigger.matches(this.chatField.getText())) {
             ChatTrigger.check((ChatScreen) (Object) this, this.chatField.getText());
             cir.setReturnValue(true);
         }

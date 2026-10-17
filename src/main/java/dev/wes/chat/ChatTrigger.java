@@ -1,5 +1,6 @@
 package dev.wes.chat;
 
+import dev.wes.command.BlockCommand;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
 
@@ -13,12 +14,9 @@ import net.minecraft.client.gui.screen.ChatScreen;
  *   <li>{@code ChatScreen#keyPressed} —— 回车前的一次兜底检查。</li>
  * </ol>
  * <p>三处都会调用 {@code TextFieldWidget#onChanged}，所以真正挂载点是
- * {@link dev.wes.mixin.TextFieldWidgetMixin}，这里只负责「防重入 + 开面板」。</p>
+ * {@link dev.wes.mixin.TextFieldWidgetMixin}，这里只负责「认出是哪条指令 + 防重入 + 开面板」。</p>
  */
 public final class ChatTrigger {
-
-    /** 触发串：注意末尾那个空格，是需求里明确要求的。 */
-    public static final String TRIGGER = "//set ";
 
     /**
      * 防重入闸门。
@@ -33,13 +31,36 @@ public final class ChatTrigger {
     }
 
     /**
-     * 检查当前输入内容是否命中触发串，命中则打开聊天框里的选择浮层。
+     * 判断这段文本是不是「某条指令 + 一个空格」。
+     *
+     * @return 命中的指令；没命中返回 null
+     */
+    public static BlockCommand find(String text) {
+        if (text == null) {
+            return null;
+        }
+        for (BlockCommand command : BlockCommand.values()) {
+            if (command.trigger().equals(text)) {
+                return command;
+            }
+        }
+        return null;
+    }
+
+    /** 供 keyPressed 兜底用：文本是否正好停在某个触发前缀上。 */
+    public static boolean matches(String text) {
+        return find(text) != null;
+    }
+
+    /**
+     * 检查当前输入内容是否命中某个指令前缀，命中则打开聊天框里的选择浮层。
      *
      * @param screen 当前聊天界面实例（用来确认「现在真的是这个界面」）
      * @param text   输入框里的完整文本
      */
     public static void check(ChatScreen screen, String text) {
-        if (firing || text == null || !TRIGGER.equals(text)) {
+        BlockCommand command = find(text);
+        if (firing || command == null) {
             return;
         }
 
@@ -59,7 +80,7 @@ public final class ChatTrigger {
         client.execute(() -> {
             firing = false;
             if (client.currentScreen == screen && screen instanceof ChatPanelHolder h) {
-                h.wes$openPanel();
+                h.wes$openPanel(command);
             }
         });
     }
