@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "wes",
   "version": "${version}",
-  "name": "WES - WorldEdit Select",
-  "description": "在聊天框输入 //set （带空格）即可弹出方块选择面板，点选方块并分配百分比，一键生成 //set 指令。",
+  "name": "World Edit Select",
+  "description": "World Edit Select (WES) —— 在聊天框输入 //set （带空格）即可弹出方块选择面板，点选方块并分配百分比，一键生成 //set 指令。",
   "authors": [
-    "WES"
+    "Mewzica"
   ],
   "contact": {},
   "license": "MIT",
