@@ -7,6 +7,10 @@
   "wes.hint": "Click a block to add / remove it. Leave the percent empty to auto-balance.",
   "wes.confirm": "Confirm",
   "wes.cancel": "Cancel",
+  "wes.state": "St",
+  "wes.state.title": "Block state: %s",
+  "wes.state.reset": "Reset",
+  "wes.back": "Back",
   "wes.err.empty": "Please select at least one block.",
   "wes.err.over": "Percent total is %s%%, it must not exceed 100%%.",
   "wes.err.long": "Command too long (%s chars), please select fewer blocks."

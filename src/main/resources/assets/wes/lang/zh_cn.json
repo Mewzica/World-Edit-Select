@@ -7,6 +7,10 @@
   "wes.hint": "点方块可加入/移出；百分比留空则自动均分剩余。",
   "wes.confirm": "确认填充",
   "wes.cancel": "取消",
+  "wes.state": "态",
+  "wes.state.title": "方块状态：%s",
+  "wes.state.reset": "重置为默认",
+  "wes.back": "返回",
   "wes.err.empty": "请至少选择一个方块。",
   "wes.err.over": "百分比总和为 %s%%，不能超过 100%%。",
   "wes.err.long": "指令太长（%s 字符），请减少方块数量。"
