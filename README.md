@@ -15,7 +15,8 @@ It is not limited to `//set`. Every WorldEdit command that takes a block pattern
 - **Stays in chat** — the panel is an overlay attached to the chat screen, not a separate screen. The chat history and the input line stay visible, and you can still see what people are saying.
 - **Searchable block list** — a live search field filters by localized name or block ID. Only the rows inside the viewport are rendered, so the ~1000-entry list costs nothing.
 - **Percentage picking** — each selected block gets a percentage field. Leave it empty and the remaining percentage is distributed evenly across the empty entries.
-- **Block states** — blocks with properties (beds, stairs, logs, slabs, …) get a `St` button that opens a property editor with `<` / `>` cycling. Only non-default properties are written into the command, e.g. `minecraft:blue_bed[part=head]`.
+- **Block states** — blocks with properties (beds, stairs, logs, slabs, …) get a `St` button that opens a property editor with `<` / `>` cycling. Only non-default properties are written into the command, e.g. `blue_bed[part=head]`.
+- **Short IDs** — vanilla blocks are written without the `minecraft:` prefix (`//set stone`, not `//set minecraft:stone`), because WorldEdit fills in the default namespace anyway. Modded blocks keep theirs (`create:cogwheel`). Chat commands cap at 256 characters, so the saved prefix is real budget.
 - **Never sends anything on its own** — the generated command is written back into the chat input. Review it, edit it, then press Enter yourself.
 - **Client side only** — no server installation required, nothing is registered on the server, and it works on any server where you already have WorldEdit permissions.
 
@@ -87,7 +88,7 @@ The project compiles against `com.sk89q.worldedit:worldedit-core` (compile-only)
 - The panel's widgets are **not** registered as screen children; focus is handed over with `ParentElement#setFocus`, which lets the inherited `charTyped` default route characters into the field being edited.
 - Blocks are collected from WorldEdit's `BlockType.REGISTRY` when available, falling back to the vanilla `Registries.BLOCK` (WorldEdit only populates its registry when a server platform boots, which never happens on a remote-server client).
 - The command table lives in `BlockCommand` and was written against the real signatures in `RegionCommands` / `GenerationCommands` (verified with `javap`), which is why `//hollow` takes its thickness first while `//cyl` takes it last.
-- A single selected block is emitted as a bare ID. WorldEdit's `RandomPatternParser` starts with `if (patterns.size() == 1) return null;`, so `100%minecraft:stone` is parsed as a block *name* and fails — percentages only work with two or more entries.
+- A single selected block is emitted as a bare ID. WorldEdit's `RandomPatternParser` starts with `if (patterns.size() == 1) return null;`, so `100%stone` is parsed as a block *name* and fails — percentages only work with two or more entries.
 
 ## License
 

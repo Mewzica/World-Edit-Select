@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>创世神选块（World Edit Select）</title>
+<!-- 这个 style 只用于在浏览器里预览得舒服一点，粘贴到编辑器时不会带过去 -->
+<style>
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; max-width: 760px; margin: 40px auto; line-height: 1.8; color: #333; }
+  h2 { font-size: 18px; margin-top: 28px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 6px 10px; font-size: 14px; }
+  th { background: #f2f2f2; }
+  code { font-family: Consolas, "Courier New", monospace; }
+  pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<h2>创世神选块（World Edit Select）</h2>
+
+<p><strong>创世神选块</strong>（英文名 World Edit Select，简称 WES）是一个 Fabric 客户端模组，把 WorldEdit 的方块指令变成可视化的方块选择器——而且它就长在聊天框里。</p>
+
+<h2>为什么需要它</h2>
+
+<p>用 WorldEdit 填方块时，指令通常长这样：</p>
+
+<pre><code>//set 50%minecraft:stone,30%minecraft:cobblestone,20%minecraft:oak_planks</code></pre>
+
+<p>要记住方块 ID、要算百分比、要保证加起来正好 100、还要拼对方括号里的方块状态。任何一处写错，服务器就回你一句「无法识别方块名称」。</p>
+
+<p>WES 把这些活全接过去：在聊天框输入 <code>//set </code>，面板弹出来，点方块、填百分比，确认后指令自动写好放回聊天框。</p>
+
+<h2>特点</h2>
+
+<ul>
+  <li><strong>在聊天框里，不是另开界面</strong>：面板是浮层，聊天记录和输入行依然可见，可以边看别人说话边操作。</li>
+  <li><strong>不止 //set</strong>：WorldEdit 里所有需要方块图案的指令都支持，共 15 条，并且会按每条指令的真实参数顺序显示对应的输入框。</li>
+  <li><strong>支持方块状态</strong>：床、楼梯、原木这类带属性的方块，点「态」按钮可以选 <code>part=head</code>、<code>facing=east</code>、<code>axis=y</code> 等状态，只把和默认值不同的部分写进指令。</li>
+  <li><strong>指令更短</strong>：原版方块不写 <code>minecraft:</code> 前缀，只有模组方块才带命名空间。<code>//set stone</code> 和 <code>//set minecraft:stone</code> 在 WorldEdit 里完全等价，而聊天指令只有 256 个字符，方块一多，省下的前缀就是实打实的额度。</li>
+  <li><strong>百分比自动均分</strong>：只填一部分百分比，剩下的自动平摊到没填的方块上，不用自己算。</li>
+  <li><strong>搜索</strong>：按中文名或方块 ID 过滤，一千多个方块里秒找。</li>
+  <li><strong>不自动发送</strong>：生成的指令只写回输入框，可以先看一眼、改一改，自己按回车。</li>
+</ul>
+
+<h2>支持的指令</h2>
+
+<table border="1" cellspacing="0" cellpadding="6">
+  <thead>
+    <tr><th>指令</th><th>生成形式</th><th>面板里的额外输入</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>//set</code></td><td><code>//set &lt;图案&gt;</code></td><td>—</td></tr>
+    <tr><td><code>//replace</code></td><td><code>//replace &lt;被替换方块&gt; &lt;图案&gt;</code></td><td>选择被替换的方块</td></tr>
+    <tr><td><code>//overlay</code></td><td><code>//overlay &lt;图案&gt;</code></td><td>—</td></tr>
+    <tr><td><code>//center</code></td><td><code>//center &lt;图案&gt;</code></td><td>—</td></tr>
+    <tr><td><code>//walls</code></td><td><code>//walls &lt;图案&gt;</code></td><td>—</td></tr>
+    <tr><td><code>//faces</code></td><td><code>//faces &lt;图案&gt;</code></td><td>—</td></tr>
+    <tr><td><code>//line</code></td><td><code>//line &lt;图案&gt; &lt;厚度&gt;</code></td><td>厚度</td></tr>
+    <tr><td><code>//curve</code></td><td><code>//curve &lt;图案&gt; &lt;厚度&gt;</code></td><td>厚度</td></tr>
+    <tr><td><code>//hollow</code></td><td><code>//hollow &lt;厚度&gt; &lt;图案&gt;</code></td><td>厚度（写在图案前面）</td></tr>
+    <tr><td><code>//sphere</code> / <code>//hsphere</code></td><td><code>//sphere &lt;图案&gt; &lt;半径&gt;</code></td><td>半径（支持 <code>3,5,7</code> 椭球写法）</td></tr>
+    <tr><td><code>//cyl</code> / <code>//hcyl</code></td><td><code>//cyl &lt;图案&gt; &lt;半径&gt; &lt;高度&gt;</code></td><td>半径、高度</td></tr>
+    <tr><td><code>//pyramid</code> / <code>//hpyramid</code></td><td><code>//pyramid &lt;图案&gt; &lt;尺寸&gt;</code></td><td>尺寸</td></tr>
+  </tbody>
+</table>
+
+<p><code>//forest</code> 和 <code>//flora</code> 不在支持范围内——它们的参数里只有密度和树木种类，不接受方块图案。</p>
+
+<h2>使用方法</h2>
+
+<ol>
+  <li>打开聊天框，输入 <code>//set </code>（注意末尾有一个空格）</li>
+  <li>面板弹出，光标自动落在搜索框</li>
+  <li>在左侧点方块加入，再点一次移除</li>
+  <li>在右侧填百分比，或点「态」修改方块状态</li>
+  <li>点击「确认填充」，指令写回聊天框</li>
+  <li>按回车发送</li>
+</ol>
+
+<table border="1" cellspacing="0" cellpadding="6">
+  <thead>
+    <tr><th>操作</th><th>效果</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>回车</td><td>确认，把指令写进输入框</td></tr>
+    <tr><td>Esc</td><td>关闭面板（聊天框保留）；在状态编辑页则返回上一层</td></tr>
+    <tr><td>滚轮</td><td>滚动方块列表 / 已选列表</td></tr>
+    <tr><td>点击面板外</td><td>关闭面板</td></tr>
+  </tbody>
+</table>
+
+<h2>安装与依赖</h2>
+
+<ul>
+  <li>Minecraft 1.20.1</li>
+  <li>Fabric Loader 0.14 及以上</li>
+  <li>Java 17</li>
+  <li>WorldEdit 7.2 及以上（Fabric 版）</li>
+</ul>
+
+<p>把 <code>worldedit-fabric</code> 和 <code>wes-&lt;版本&gt;+mc1.20.1.jar</code> 一起放进 <code>.minecraft/mods</code> 即可。</p>
+
+<h2>注意事项</h2>
+
+<ul>
+  <li><strong>只需装在客户端</strong>。这是纯客户端模组，服务端装了没有任何作用，加载器会直接跳过。</li>
+  <li><strong>但服务端必须有 WorldEdit</strong>。WES 只负责拼出指令文本，真正执行的是服务器上的 WorldEdit；单人存档或开房间同理。</li>
+  <li><strong>需要有对应权限</strong>。你在服务器上得具备 <code>worldedit.region.set</code>、<code>worldedit.region.replace</code> 这类权限，否则指令发出去也只会报错。</li>
+  <li><strong>不修改任何游戏内容</strong>，不添加方块和物品，也不与服务器进行额外通信。</li>
+</ul>
+
+<h2>开源</h2>
+
+<p>MIT 协议。<br>
+源码地址：<a href="https://github.com/Mewzica/World-Edit-Select" target="_blank">https://github.com/Mewzica/World-Edit-Select</a><br>
+作者：Mewzica</p>
+
+</body>
+</html>

@@ -12,7 +12,6 @@ import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
 import net.minecraft.state.property.Property;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -41,8 +40,8 @@ import java.util.Map;
  *       不需要自己重写字符输入（1.20.1 的 ChatScreen 也没有 charTyped 可以混入）。</li>
  * </ul>
  *
- * <p>确认时不会发送任何东西，只把拼好的指令（例如 {@code //set 50%minecraft:stone,...}
- * 或 {@code //replace minecraft:dirt 50%minecraft:stone,...}）写回聊天输入框，
+ * <p>确认时不会发送任何东西，只把拼好的指令（例如 {@code //set 50%stone,50%dirt}
+ * 或 {@code //replace dirt 50%stone,50%cobblestone}）写回聊天输入框，
  * 玩家自己看一眼再按回车，仍然可以继续手改。</p>
  */
 public final class ChatBlockPanel {
@@ -881,7 +880,7 @@ public final class ChatBlockPanel {
                 continue;
             }
             Block block = order.get(i);
-            ids.add(Registries.BLOCK.getId(block) + stateSuffix(this.selectedStates.get(block)));
+            ids.add(BlockCatalog.commandId(block) + stateSuffix(this.selectedStates.get(block)));
             percentsOut.add(percents[i]);
         }
 
@@ -895,7 +894,7 @@ public final class ChatBlockPanel {
             // 关键：WorldEdit 的 RandomPatternParser 里有一句
             //     if (patterns.size() == 1) return null;
             // 也就是说「只有一个条目」时百分比语法根本不生效，
-            // "100%minecraft:blue_bed" 会被当成一个方块名去查，然后报
+            // "100%blue_bed" 会被当成一个方块名去查，然后报
             // "无法识别方块名称"。所以单方块必须不带百分比。
             body = ids.get(0);
         } else {
@@ -913,7 +912,7 @@ public final class ChatBlockPanel {
         // 其余（line / sphere / cyl / pyramid / forest）参数都在图案后面。
         List<String> args = new ArrayList<>();
         if (this.command.needsSource()) {
-            args.add(Registries.BLOCK.getId(this.sourceBlock).toString());
+            args.add(BlockCatalog.commandId(this.sourceBlock));
         }
         String extra1 = readNumber(this.extra1Field);
         String extra2 = readNumber(this.extra2Field);
@@ -1042,9 +1041,11 @@ public final class ChatBlockPanel {
         context.drawText(this.textRenderer, Text.translatable("wes.state.title", block.getName()),
                 this.px + 6, this.py + 8, 0xFFFFFFFF, false);
 
+        // 状态编辑页顶部那行「预览」：没有非默认属性时显示方块 ID 本身，
+        // 显示规则跟实际拼指令一致（原版不带 minecraft: 前缀）。
         String suffix = stateSuffix(state);
         context.drawText(this.textRenderer,
-                Text.literal(suffix.isEmpty() ? "minecraft:" + Registries.BLOCK.getId(block).getPath() : suffix),
+                Text.literal(suffix.isEmpty() ? BlockCatalog.commandId(block) : suffix),
                 this.px + 6, this.py + 20, COL_TEXT_DIM, false);
 
         int listTop = this.py + 34;

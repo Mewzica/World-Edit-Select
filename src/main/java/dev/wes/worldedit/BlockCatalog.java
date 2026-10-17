@@ -95,9 +95,25 @@ public final class BlockCatalog {
         return isAir(block) ? null : block;
     }
 
-    /** 方块 ID，例如 {@code minecraft:stone}。拼 WorldEdit 指令时用它，别用显示名。 */
+    /** 方块 ID，例如 {@code minecraft:stone}。用于排序和搜索匹配。 */
     public static String idOf(Block block) {
         return Registries.BLOCK.getId(block).toString();
+    }
+
+    /**
+     * 拼进 WorldEdit 指令的方块 ID：<b>原版方块省略 {@code minecraft:}，模组方块保留命名空间</b>。
+     *
+     * <p>WorldEdit 解析图案时，没写命名空间的 ID 会按 {@code minecraft:} 补全，
+     * 所以 {@code //set stone} 和 {@code //set minecraft:stone} 完全等价，
+     * 但前者少了 10 个字符。聊天指令有 256 字符上限，方块一多，
+     * 省下的这些前缀就是实打实的可用额度。</p>
+     *
+     * <p>模组方块必须带前缀，因为它们的命名空间不是 {@code minecraft}
+     * （例如 {@code create:cogwheel}），省掉就解析不出来了。</p>
+     */
+    public static String commandId(Block block) {
+        Identifier id = Registries.BLOCK.getId(block);
+        return "minecraft".equals(id.getNamespace()) ? id.getPath() : id.toString();
     }
 
     private static boolean isAir(Block block) {
