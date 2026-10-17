@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# Loom / run 目录
+run/
+remappedSrc/
+
+# 系统
+.DS_Store
+Thumbs.db

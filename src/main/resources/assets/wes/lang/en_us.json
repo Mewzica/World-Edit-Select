@@ -1,0 +1,13 @@
+{
+  "wes.title": "WorldEdit - Select Blocks",
+  "wes.search": "Search blocks...",
+  "wes.selected": "Selected: %s",
+  "wes.selected.empty": "Click a block on the left to add it.",
+  "wes.empty": "No matching block.",
+  "wes.hint": "Click a block to add / remove it. Leave the percent empty to auto-balance.",
+  "wes.confirm": "Confirm",
+  "wes.cancel": "Cancel",
+  "wes.err.empty": "Please select at least one block.",
+  "wes.err.over": "Percent total is %s%%, it must not exceed 100%%.",
+  "wes.err.long": "Command too long (%s chars), please select fewer blocks."
+}
