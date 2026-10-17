@@ -6,7 +6,7 @@ Instead of memorizing block IDs and percentage syntax, type `//set ` in chat and
 
 It is not limited to `//set`. Every WorldEdit command that takes a block pattern is supported, and the panel shows the extra arguments each one needs — thickness, radius, height, size, or the mask to replace.
 
-> `wes` is the mod id; **World Edit Select** is the full name.
+> `wes` is the mod id; **World Edit Select** is the full name; **创世神选块** is the Chinese name.
 
 ## Features
 
