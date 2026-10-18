@@ -90,6 +90,12 @@ The project compiles against `com.sk89q.worldedit:worldedit-core` (compile-only)
 - The command table lives in `BlockCommand` and was written against the real signatures in `RegionCommands` / `GenerationCommands` (verified with `javap`), which is why `//hollow` takes its thickness first while `//cyl` takes it last.
 - A single selected block is emitted as a bare ID. WorldEdit's `RandomPatternParser` starts with `if (patterns.size() == 1) return null;`, so `100%stone` is parsed as a block *name* and fails — percentages only work with two or more entries.
 
+## Compatibility
+
+The panel is drawn from `ChatScreen#render`, which is enough for vanilla chat. Chat mods that replace the chat screen entirely and deliberately skip `super.render` — AtomChat is one — would otherwise get an invisible panel, so WES ships a second, optional mixin for `AtomChatScreen`.
+
+That mixin is best-effort by design: its injections use `require = 0`, so if AtomChat renames those methods the panel simply stops appearing instead of crashing the game. It targets the intermediary names (`method_25394`, …) because a mod class's overrides of Minecraft methods get renamed on remap, and a `targets = "..."` mixin gets no refmap entry to translate `render` for us.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

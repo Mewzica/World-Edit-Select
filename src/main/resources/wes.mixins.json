@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "wes-refmap.json",
   "client": [
+    "AtomChatScreenMixin",
     "ChatScreenMixin",
     "TextFieldWidgetMixin"
   ],

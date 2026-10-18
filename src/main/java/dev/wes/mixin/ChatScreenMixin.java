@@ -1,6 +1,7 @@
 package dev.wes.mixin;
 
 import dev.wes.chat.ChatPanelHolder;
+import dev.wes.chat.ChatPanelHooks;
 import dev.wes.chat.ChatTrigger;
 import dev.wes.command.BlockCommand;
 import dev.wes.gui.ChatBlockPanel;
@@ -79,29 +80,21 @@ public abstract class ChatScreenMixin implements ChatPanelHolder {
      */
     @Inject(method = "render", at = @At("TAIL"))
     private void wes$onRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
-        if (this.wes$panel != null && this.wes$panel.isOpen()) {
-            this.wes$panel.render(context, mouseX, mouseY, delta);
-        }
+        ChatPanelHooks.render(this, context, mouseX, mouseY, delta);
     }
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void wes$onMouseClicked(double mouseX, double mouseY, int button,
                                     CallbackInfoReturnable<Boolean> cir) {
-        if (this.wes$panel == null || !this.wes$panel.isOpen()) {
-            return;
-        }
-        if (this.wes$panel.mouseClicked(mouseX, mouseY, button)) {
+        if (ChatPanelHooks.mouseClicked(this, mouseX, mouseY, button)) {
             cir.setReturnValue(true);
-        } else if (!this.wes$panel.contains(mouseX, mouseY)) {
-            // 点在面板外面：收起面板，让原版逻辑继续（比如点别处关掉聊天）
-            this.wes$panel.close();
         }
     }
 
     @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
     private void wes$onMouseScrolled(double mouseX, double mouseY, double amount,
                                      CallbackInfoReturnable<Boolean> cir) {
-        if (this.wes$panel != null && this.wes$panel.mouseScrolled(mouseX, mouseY, amount)) {
+        if (ChatPanelHooks.mouseScrolled(this, mouseX, mouseY, amount)) {
             cir.setReturnValue(true);
         }
     }
@@ -109,10 +102,13 @@ public abstract class ChatScreenMixin implements ChatPanelHolder {
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void wes$onKeyPressed(int keyCode, int scanCode, int modifiers,
                                   CallbackInfoReturnable<Boolean> cir) {
-        if (this.wes$panel != null && this.wes$panel.isOpen()) {
-            if (this.wes$panel.keyPressed(keyCode, scanCode, modifiers)) {
-                cir.setReturnValue(true);
-            }
+        if (ChatPanelHooks.keyPressed(this, keyCode, scanCode, modifiers)) {
+            cir.setReturnValue(true);
+            return;
+        }
+        if (this.wes$isPanelOpen()) {
+            // 面板开着时不让按键漏给原版聊天框（比如回车会被当成发送消息）
+            cir.setReturnValue(true);
             return;
         }
 
