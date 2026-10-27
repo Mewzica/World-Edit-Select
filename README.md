@@ -1,6 +1,6 @@
 # World Edit Select (WES)
 
-A client-side Minecraft Forge mod that turns WorldEdit's block commands into a visual block picker — right inside the chat box.
+A client-side Minecraft NeoForge mod that turns WorldEdit's block commands into a visual block picker — right inside the chat box.
 
 Instead of memorizing block IDs and percentage syntax, type `//set ` in chat and a picker opens above the input line. Click the blocks you want, assign percentages (or leave them blank to auto-balance), and WES writes a ready-to-send WorldEdit command back into your chat input.
 
@@ -10,6 +10,7 @@ It is not limited to `//set`. Every WorldEdit command that takes a block pattern
 
 ## Features
 
+- **Toggle switch** — a small switch sits just above the chat input. Leave it on and typing a command prefix opens the picker; turn it off and the chat box stays vanilla, so you can type `//set ` by hand without the panel jumping in.
 - **Trigger by typing** — the picker opens the moment the chat input is exactly a command prefix plus a space (`//set `, `//replace `, `//sphere `, …). No keybind, no command, no extra UI.
 - **Command-aware arguments** — the panel follows each command's real signature, so the fields appear in the right order: `//hollow <thickness> <pattern>` puts thickness *before* the pattern, `//cyl <pattern> <radius> <height>` puts it *after*, and `//replace <from> <pattern>` adds a "block to replace" picker.
 - **Stays in chat** — the panel is an overlay attached to the chat screen, not a separate screen. The chat history and the input line stay visible, and you can still see what people are saying.
@@ -60,15 +61,15 @@ It is not limited to `//set`. Every WorldEdit command that takes a block pattern
 
 | | |
 | --- | --- |
-| Minecraft | 1.20.1 |
-| Loader | Forge 47.2+ for Minecraft 1.20.1 |
+| Minecraft | 1.20.4 |
+| Loader | NeoForge 20.4+ for Minecraft 1.20.4 |
 | Dependency | [WorldEdit](https://modrinth.com/mod/worldedit) 7.2+ (Forge), client side |
 | Java | 17 |
 
 ## Installation
 
-1. Install Forge 47.2+ for Minecraft 1.20.1.
-2. Drop `worldedit-forge` and `wes-<version>+mc1.20.1.jar` into `.minecraft/mods`.
+1. Install NeoForge 20.4+ for Minecraft 1.20.4.
+2. Drop `worldedit-forge` and `wes-<version>+mc1.20.4.jar` into `.minecraft/mods`.
 3. Launch the game. No configuration needed.
 
 ## Building
@@ -100,7 +101,7 @@ The Fabric branch and this one are the same mod built against two loaders, so th
 
 | | Fabric | Forge |
 | --- | --- | --- |
-| Build | `fabric-loom` (Kotlin DSL) | ForgeGradle 6 + MixinGradle (Groovy DSL) |
+| Build | `fabric-loom` (Kotlin DSL) | ModDevGradle (Groovy DSL) |
 | Mappings | Yarn | Mojang official (ForgeGradle reobfuscates the jar to SRG) |
 | Entrypoint | `ClientModInitializer` | `@Mod` constructor |
 | Metadata | `fabric.mod.json` | `META-INF/mods.toml` + `pack.mcmeta` |

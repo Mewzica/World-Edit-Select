@@ -1,5 +1,6 @@
 modLoader = "javafml"
-loaderVersion = "[47,)"
+# NeoForge 20.4 的 javafml 是 2.x 一代（NeoForge 从 20.2 起独立版本号）
+loaderVersion = "[2,)"
 license = "MIT"
 issueTrackerURL = "https://github.com/Mewzica/World-Edit-Select/issues"
 
@@ -13,17 +14,18 @@ description = '''
 World Edit Select (WES) —— 在聊天框输入 //set （带空格）即可弹出方块选择面板，点选方块并分配百分比，一键生成 //set 指令。
 '''
 
+# NeoForge 从 20.2 起把加载器自己的 modId 从 forge 改成 neoforge
 [[dependencies.wes]]
-modId = "forge"
+modId = "neoforge"
 mandatory = true
-versionRange = "[47,)"
+versionRange = "[20.4,)"
 ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.wes]]
 modId = "minecraft"
 mandatory = true
-versionRange = "[1.20.1,1.20.2)"
+versionRange = "[1.20.4,1.20.5)"
 ordering = "NONE"
 side = "CLIENT"
 
@@ -35,5 +37,7 @@ versionRange = "[7.2.0,)"
 ordering = "NONE"
 side = "CLIENT"
 
-# 注意：1.20.1 的 Forge 不解析 mods.toml 里的 [[mixins]] 段（那是 NeoForge 的东西）。
-# Mixin 配置是通过 jar manifest 的 MixinConfigs 属性声明的，见 build.gradle 的 jar {} 块。
+# NeoForge 支持在 mods.toml 里直接声明 Mixin 配置（Forge 1.20.1 不支持，只能写 manifest）。
+# 两边都保留：manifest 那份由 build.gradle 的 jar {} 块写入，兼容性最好。
+[[mixins]]
+config = "wes.mixins.json"

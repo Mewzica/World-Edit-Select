@@ -1,9 +1,8 @@
 plugins {
     id 'java'
-    // ForgeGradle 6：1.20.1 的标准构建插件。
-    id 'net.minecraftforge.gradle' version '6.0.54'
-    // MixinGradle：给 ForgeGradle 补上 Mixin 注解处理器与 refmap 生成。
-    id 'org.spongepowered.mixin' version '0.7.38'
+    // ModDevGradle：NeoForge 20.2+（含 1.20.4）的官方推荐构建插件。
+    // 它取代了 1.20.1 时代的 ForgeGradle，坐标也从 net.neoforged:forge 换成了 net.neoforged:neoforge。
+    id 'net.neoforged.moddev' version '1.0.23'
 }
 
 version = "${mod_version}+mc${minecraft_version}"
@@ -19,32 +18,24 @@ java {
     }
 }
 
-minecraft {
-    // 官方映射（Mojang）。Forge 运行期是 SRG 名，Mixin refmap 会负责翻译。
-    mappings channel: 'official', version: minecraft_version
+neoForge {
+    // 目录里显式写 "1.20.4-20.4.237"：ModDevGradle 从版本号里自己拆 MC 版本
+    version = "${minecraft_version}-${neoforge_version}"
 
     runs {
         client {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', ''
-            property 'forge.logging.console.level', 'debug'
-
-            // 开发环境里 refmap 里的 SRG 名要再翻一次才能对上官方映射的编译产物
-            property 'mixin.env.remapRefMap', 'true'
-            property 'mixin.env.refMapRemappingFile', "${project.buildDir}/createSrgToMcp/output.srg"
-
-            mods {
-                wes {
-                    source sourceSets.main
-                }
-            }
+            client()
+            gameDirectory = project.file('run')
+            // 开发环境里 Mixin 的 refmap 需要按运行时映射重映射一次
+            systemProperty 'mixin.env.remapRefMap', 'true'
         }
     }
-}
 
-mixin {
-    add sourceSets.main, 'wes.refmap.json'
-    config 'wes.mixins.json'
+    mods {
+        wes {
+            sourceSet sourceSets.main
+        }
+    }
 }
 
 repositories {
@@ -54,13 +45,13 @@ repositories {
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-
     // 只需要 WorldEdit 的「核心 API」（BlockType / BlockFactory / Registry 等）。
     // 这些类与 Minecraft 版本无关，所以直接拿 worldedit-core 编译即可；
     // 运行期真正的实现由玩家安装的 WorldEdit 模组提供，不打包、不重映射。
     compileOnly "com.sk89q.worldedit:worldedit-core:${worldedit_version}"
 
+    // NeoForge 运行期自带 Mixin，这里只需要编译期的注解与注解处理器。
+    compileOnly 'org.spongepowered:mixin:0.8.5'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
@@ -85,8 +76,7 @@ jar {
                 'Implementation-Title'   : project.name,
                 'Implementation-Version' : project.version,
                 'Implementation-Vendor'  : 'Mewzica',
-                // 1.20.1 的 Forge 不读 mods.toml 的 [[mixins]] 段，
-                // Mixin 配置只能靠这个 manifest 属性被找到。
+                // NeoForge 也认 mods.toml 里的 [[mixins]]，但 manifest 这条更保险
                 'MixinConfigs'           : 'wes.mixins.json'
         ])
     }

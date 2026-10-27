@@ -1,5 +1,7 @@
 {
   "wes.title": "WorldEdit - Select Blocks",
+  "wes.toggle.on": "Block picker: ON",
+  "wes.toggle.off": "Block picker: OFF",
   "wes.search": "Search blocks...",
   "wes.selected": "Selected: %s",
   "wes.selected.empty": "Click a block on the left to add it.",
