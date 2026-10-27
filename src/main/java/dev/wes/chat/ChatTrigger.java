@@ -59,6 +59,10 @@ public final class ChatTrigger {
      * @param text   输入框里的完整文本
      */
     public static void check(ChatScreen screen, String text) {
+        // 开关关着就完全不介入：聊天框退回原版行为
+        if (!ChatToggle.isEnabled()) {
+            return;
+        }
         BlockCommand command = find(text);
         if (firing || command == null) {
             return;
