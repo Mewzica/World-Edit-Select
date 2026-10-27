@@ -1,0 +1,93 @@
+plugins {
+    id 'java'
+    // ForgeGradle 6：1.20.1 的标准构建插件。
+    id 'net.minecraftforge.gradle' version '6.0.54'
+    // MixinGradle：给 ForgeGradle 补上 Mixin 注解处理器与 refmap 生成。
+    id 'org.spongepowered.mixin' version '0.7.38'
+}
+
+version = "${mod_version}+mc${minecraft_version}"
+group = 'dev.wes'
+
+base {
+    archivesName = 'wes'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+minecraft {
+    // 官方映射（Mojang）。Forge 运行期是 SRG 名，Mixin refmap 会负责翻译。
+    mappings channel: 'official', version: minecraft_version
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', ''
+            property 'forge.logging.console.level', 'debug'
+
+            // 开发环境里 refmap 里的 SRG 名要再翻一次才能对上官方映射的编译产物
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.buildDir}/createSrgToMcp/output.srg"
+
+            mods {
+                wes {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+mixin {
+    add sourceSets.main, 'wes.refmap.json'
+    config 'wes.mixins.json'
+}
+
+repositories {
+    // WorldEdit 的 Maven 仓库（worldedit-core 就在这里）
+    maven { name = 'EngineHub'; url = 'https://maven.enginehub.org/repo/' }
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    // 只需要 WorldEdit 的「核心 API」（BlockType / BlockFactory / Registry 等）。
+    // 这些类与 Minecraft 版本无关，所以直接拿 worldedit-core 编译即可；
+    // 运行期真正的实现由玩家安装的 WorldEdit 模组提供，不打包、不重映射。
+    compileOnly "com.sk89q.worldedit:worldedit-core:${worldedit_version}"
+
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release.set(17)
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    inputs.property 'version', project.version
+    filesMatching(['META-INF/mods.toml']) {
+        expand version: project.version
+    }
+}
+
+jar {
+    manifest {
+        attributes([
+                'Specification-Title'    : 'wes',
+                'Specification-Vendor'   : 'Mewzica',
+                'Specification-Version'  : '1',
+                'Implementation-Title'   : project.name,
+                'Implementation-Version' : project.version,
+                'Implementation-Vendor'  : 'Mewzica',
+                // 1.20.1 的 Forge 不读 mods.toml 的 [[mixins]] 段，
+                // Mixin 配置只能靠这个 manifest 属性被找到。
+                'MixinConfigs'           : 'wes.mixins.json'
+        ])
+    }
+}

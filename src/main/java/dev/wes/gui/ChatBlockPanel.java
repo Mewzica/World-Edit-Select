@@ -2,20 +2,20 @@ package dev.wes.gui;
 
 import dev.wes.command.BlockCommand;
 import dev.wes.worldedit.BlockCatalog;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.Element;
-import net.minecraft.client.gui.ParentElement;
-import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.state.property.Property;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.ContainerEventHandler;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -34,8 +34,8 @@ import java.util.Map;
  *   <li>绘制：由 ChatScreenMixin 在 {@code ChatScreen.render} 的 TAIL 里调用
  *       {@link #render} —— 此时聊天输入框已经画完，我们在它上方铺面板；</li>
  *   <li>输入：由 ChatScreenMixin 在 mouseClicked / mouseScrolled / keyPressed 的 HEAD 里转发；</li>
- *   <li>焦点：控件不注册进 Screen，靠 {@link ParentElement#setFocused} 手动设焦点。
- *       这样 {@code Screen} 从 {@code ParentElement} 继承来的
+ *   <li>焦点：控件不注册进 Screen，靠 {@link ContainerEventHandler#setFocused} 手动设焦点。
+ *       这样 {@code Screen} 从 {@code ContainerEventHandler} 继承来的
  *       {@code charTyped -> getFocused().charTyped()} 就会把字符送进我们正在编辑的输入框，
  *       不需要自己重写字符输入（1.20.1 的 ChatScreen 也没有 charTyped 可以混入）。</li>
  * </ul>
@@ -69,10 +69,10 @@ public final class ChatBlockPanel {
     /* ------------------------------ 宿主 ------------------------------ */
 
     private final ChatScreen screen;
-    private final ParentElement parent;
-    private final TextRenderer textRenderer;
+    private final ContainerEventHandler parent;
+    private final Font font;
     /** 聊天输入框：既当「搜索框之外的那个输入行」，也是确认后回填指令的地方。 */
-    private TextFieldWidget chatField;
+    private EditBox chatField;
 
     /* ------------------------------ 数据 ------------------------------ */
 
@@ -83,20 +83,20 @@ public final class ChatBlockPanel {
     /** 已选方块 → 选中的方块状态（默认就是默认状态）。 */
     private final Map<Block, BlockState> selectedStates = new LinkedHashMap<>();
     /** 与 {@link #percentOrder} 一一对应的百分比输入框。 */
-    private final List<TextFieldWidget> percentWidgets = new ArrayList<>();
+    private final List<EditBox> percentWidgets = new ArrayList<>();
     private final List<Block> percentOrder = new ArrayList<>();
     /** 正在编辑方块状态的那个方块；null 表示当前是列表视图。 */
     private Block stateEditing;
     private double propScroll;
 
-    private TextFieldWidget searchField;
-    private ButtonWidget confirmButton;
-    private ButtonWidget cancelButton;
+    private EditBox searchField;
+    private Button confirmButton;
+    private Button cancelButton;
     /** //replace 的「被替换方块」选择按钮（只有 replace 才有）。 */
-    private ButtonWidget sourceButton;
-    /** 附加参数输入框：厚度 / 半径 / 高度 / 尺寸 / 密度，按指令决定有没有。 */
-    private TextFieldWidget extra1Field;
-    private TextFieldWidget extra2Field;
+    private Button sourceButton;
+    /** 附加参数输入框：厚度 / 半径 / 高度 / 尺寸，按指令决定有没有。 */
+    private EditBox extra1Field;
+    private EditBox extra2Field;
 
     /** 本次打开面板对应的指令，确认时按它的签名拼指令。 */
     private BlockCommand command = BlockCommand.SET;
@@ -109,7 +109,7 @@ public final class ChatBlockPanel {
     private String query = "";
     private String statusMessage = "";
     /** 本帧要画的悬停提示（目前只有「态」按钮用），null 表示没有。 */
-    private Text hoverTip;
+    private Component hoverTip;
     private double listScroll;
     private double selScroll;
 
@@ -124,12 +124,12 @@ public final class ChatBlockPanel {
     private int optY;
     private int sourceBtnX, sourceBtnW;
     private int extra1LabelX, extra1X, extra2LabelX, extra2X;
-    private Text extra1Label, extra2Label;
+    private Component extra1Label, extra2Label;
 
-    public ChatBlockPanel(ChatScreen screen, TextRenderer textRenderer, TextFieldWidget chatField) {
+    public ChatBlockPanel(ChatScreen screen, Font font, EditBox chatField) {
         this.screen = screen;
         this.parent = screen;
-        this.textRenderer = textRenderer;
+        this.font = font;
         this.chatField = chatField;
     }
 
@@ -163,7 +163,7 @@ public final class ChatBlockPanel {
         this.pickingSource = false;
         // 把残留的 "//set " 清掉：面板开着的时候这半截指令没有任何意义，
         // 万一玩家直接按回车还会发给服务器。
-        this.chatField.setText("");
+        this.chatField.setValue("");
         this.computeLayout();
         this.buildWidgets();
         this.setFocus(this.searchField);
@@ -188,12 +188,12 @@ public final class ChatBlockPanel {
     }
 
     /** 窗口尺寸变化后（ChatScreen 会重建 chatField）重新摆位。 */
-    public void onResize(TextFieldWidget newChatField) {
+    public void onResize(EditBox newChatField) {
         this.chatField = newChatField;
         if (!this.open) {
             return;
         }
-        TextFieldWidget focused = this.parent.getFocused() instanceof TextFieldWidget f ? f : null;
+        EditBox focused = this.parent.getFocused() instanceof EditBox f ? f : null;
         String[] extras = this.captureExtras();
         this.computeLayout();
         this.buildWidgets();
@@ -212,8 +212,8 @@ public final class ChatBlockPanel {
      */
     private String[] captureExtras() {
         return new String[]{
-                this.extra1Field == null ? null : this.extra1Field.getText(),
-                this.extra2Field == null ? null : this.extra2Field.getText()
+                this.extra1Field == null ? null : this.extra1Field.getValue(),
+                this.extra2Field == null ? null : this.extra2Field.getValue()
         };
     }
 
@@ -222,10 +222,10 @@ public final class ChatBlockPanel {
             return;
         }
         if (this.extra1Field != null && saved[0] != null) {
-            this.extra1Field.setText(saved[0]);
+            this.extra1Field.setValue(saved[0]);
         }
         if (this.extra2Field != null && saved[1] != null) {
-            this.extra2Field.setText(saved[1]);
+            this.extra2Field.setValue(saved[1]);
         }
     }
 
@@ -237,7 +237,7 @@ public final class ChatBlockPanel {
         this.px = 4;
         this.pw = this.screen.width - 8;
         this.py = 4;
-        this.ph = MathHelper.clamp(Math.round(this.screen.height * 0.68F), 150, 260);
+        this.ph = Mth.clamp(Math.round(this.screen.height * 0.68F), 150, 260);
 
         // 标题行占 20px；只有 //replace / //line / //sphere 这类需要额外参数的指令
         // 才多留一行参数行，//set、//walls 这些保持原来的紧凑布局。
@@ -267,18 +267,18 @@ public final class ChatBlockPanel {
             this.sourceBtnW = 150;
             x += this.sourceBtnW + 10;
         }
-        this.extra1Label = this.command.extra1Lang() == null ? null : Text.translatable(this.command.extra1Lang());
+        this.extra1Label = this.command.extra1Lang() == null ? null : Component.translatable(this.command.extra1Lang());
         this.extra1LabelX = x;
         this.extra1X = x;
         if (this.extra1Label != null) {
-            this.extra1X = x + this.textRenderer.getWidth(this.extra1Label) + 4;
+            this.extra1X = x + this.font.width(this.extra1Label) + 4;
             x = this.extra1X + EXTRA_W + 14;
         }
-        this.extra2Label = this.command.extra2Lang() == null ? null : Text.translatable(this.command.extra2Lang());
+        this.extra2Label = this.command.extra2Lang() == null ? null : Component.translatable(this.command.extra2Lang());
         this.extra2LabelX = x;
         this.extra2X = x;
         if (this.extra2Label != null) {
-            this.extra2X = x + this.textRenderer.getWidth(this.extra2Label) + 4;
+            this.extra2X = x + this.font.width(this.extra2Label) + 4;
         }
     }
 
@@ -297,41 +297,41 @@ public final class ChatBlockPanel {
 
         // 参数行：源方块按钮 + 数字输入框，按当前指令的签名决定建哪几个
         if (this.command.needsSource()) {
-            this.sourceButton = ButtonWidget.builder(this.sourceLabel(), b -> {
+            this.sourceButton = Button.builder(this.sourceLabel(), b -> {
                 this.pickingSource = !this.pickingSource;
                 b.setMessage(this.sourceLabel());
-            }).dimensions(this.sourceBtnX, this.optY, this.sourceBtnW, 16).build();
+            }).bounds(this.sourceBtnX, this.optY, this.sourceBtnW, 16).build();
         }
         this.extra1Field = this.makeExtraField(this.extra1X, this.command.extra1Default(), this.command.extra1List());
         this.extra2Field = this.makeExtraField(this.extra2X, this.command.extra2Default(), false);
 
-        this.searchField = new TextFieldWidget(this.textRenderer,
-                this.listX, this.listY - 20, this.listW, 16, Text.translatable("wes.search"));
+        this.searchField = new EditBox(this.font,
+                this.listX, this.listY - 20, this.listW, 16, Component.translatable("wes.search"));
         this.searchField.setMaxLength(64);
-        this.searchField.setPlaceholder(Text.translatable("wes.search").formatted(Formatting.DARK_GRAY));
-        this.searchField.setText(this.query);
-        this.searchField.setChangedListener(text -> {
+        this.searchField.setSuggestion(Component.translatable("wes.search").getString());
+        this.searchField.setValue(this.query);
+        this.searchField.setResponder(text -> {
             this.query = text;
             this.applyFilter(text);
             this.listScroll = 0.0D;
         });
 
         for (Block block : this.selectedBlocks.keySet()) {
-            TextFieldWidget field = new TextFieldWidget(this.textRenderer, 0, 0, FIELD_W, FIELD_H, Text.literal("%"));
+            EditBox field = new EditBox(this.font, 0, 0, FIELD_W, FIELD_H, Component.literal("%"));
             field.setMaxLength(3);
-            field.setTextPredicate(text -> text.isEmpty() || text.matches("[0-9]{1,3}"));
+            field.setFilter(text -> text.isEmpty() || text.matches("[0-9]{1,3}"));
             int value = this.selectedBlocks.getOrDefault(block, 0);
-            field.setText(value <= 0 ? "" : Integer.toString(value));
-            field.setChangedListener(text -> {
+            field.setValue(value <= 0 ? "" : Integer.toString(value));
+            field.setResponder(text -> {
                 int parsed = 0;
                 if (!text.isEmpty()) {
                     try {
                         parsed = Integer.parseInt(text);
                     } catch (NumberFormatException ignored) {
-                        // setTextPredicate 已经挡掉了非数字
+                        // setFilter 已经挡掉了非数字
                     }
                 }
-                this.selectedBlocks.put(block, MathHelper.clamp(parsed, 0, 100));
+                this.selectedBlocks.put(block, Mth.clamp(parsed, 0, 100));
                 this.statusMessage = "";
             });
             this.percentWidgets.add(field);
@@ -339,10 +339,10 @@ public final class ChatBlockPanel {
         }
 
         int buttonY = this.py + this.ph - 26;
-        this.confirmButton = ButtonWidget.builder(Text.translatable("wes.confirm"), b -> this.confirm())
-                .dimensions(this.px + this.pw - 6 - 200, buttonY, 96, 18).build();
-        this.cancelButton = ButtonWidget.builder(Text.translatable("wes.cancel"), b -> this.close())
-                .dimensions(this.px + this.pw - 6 - 98, buttonY, 92, 18).build();
+        this.confirmButton = Button.builder(Component.translatable("wes.confirm"), b -> this.confirm())
+                .bounds(this.px + this.pw - 6 - 200, buttonY, 96, 18).build();
+        this.cancelButton = Button.builder(Component.translatable("wes.cancel"), b -> this.close())
+                .bounds(this.px + this.pw - 6 - 98, buttonY, 92, 18).build();
 
         this.applyFilter(this.query);
         this.layoutWidgets();
@@ -354,25 +354,25 @@ public final class ChatBlockPanel {
      * @param defaultValue null 表示这条指令不需要这个参数，直接不建
      * @param allowList    true 时允许逗号（{@code //sphere} 的椭球半径 {@code 3,5,7}）
      */
-    private TextFieldWidget makeExtraField(int x, String defaultValue, boolean allowList) {
+    private EditBox makeExtraField(int x, String defaultValue, boolean allowList) {
         if (defaultValue == null) {
             return null;
         }
-        TextFieldWidget field = new TextFieldWidget(this.textRenderer, x, this.optY, EXTRA_W, FIELD_H, Text.literal(""));
+        EditBox field = new EditBox(this.font, x, this.optY, EXTRA_W, FIELD_H, Component.literal(""));
         field.setMaxLength(11);
-        field.setTextPredicate(text -> text.isEmpty() || text.matches(allowList ? "[0-9,]{1,11}" : "[0-9]{1,3}"));
-        field.setText(defaultValue);
-        field.setChangedListener(text -> this.statusMessage = "");
+        field.setFilter(text -> text.isEmpty() || text.matches(allowList ? "[0-9,]{1,11}" : "[0-9]{1,3}"));
+        field.setValue(defaultValue);
+        field.setResponder(text -> this.statusMessage = "");
         return field;
     }
 
     /** //replace 那个按钮上显示的文字：没选 / 正在选 / 已选方块名。 */
-    private Text sourceLabel() {
+    private Component sourceLabel() {
         if (this.sourceBlock == null) {
-            return Text.translatable(this.pickingSource ? "wes.source.picking" : "wes.source.none");
+            return Component.translatable(this.pickingSource ? "wes.source.picking" : "wes.source.none");
         }
-        Text label = Text.translatable("wes.source", this.sourceBlock.getName());
-        return this.pickingSource ? label.copy().formatted(Formatting.YELLOW) : label;
+        Component label = Component.translatable("wes.source", this.sourceBlock.getName());
+        return this.pickingSource ? label.copy().withStyle(ChatFormatting.YELLOW) : label;
     }
 
     private void applyFilter(String text) {
@@ -390,9 +390,9 @@ public final class ChatBlockPanel {
 
     private void clampScroll() {
         double maxList = Math.max(0.0D, this.filtered.size() * (double) ROW_H - this.listH);
-        this.listScroll = MathHelper.clamp(this.listScroll, 0.0D, maxList);
+        this.listScroll = Mth.clamp(this.listScroll, 0.0D, maxList);
         double maxSel = Math.max(0.0D, this.selectedBlocks.size() * (double) SEL_ROW_H + 8.0D - this.selH);
-        this.selScroll = MathHelper.clamp(this.selScroll, 0.0D, maxSel);
+        this.selScroll = Mth.clamp(this.selScroll, 0.0D, maxSel);
     }
 
     private void layoutWidgets() {
@@ -405,7 +405,7 @@ public final class ChatBlockPanel {
         }
 
         for (int i = 0; i < this.percentWidgets.size(); i++) {
-            TextFieldWidget field = this.percentWidgets.get(i);
+            EditBox field = this.percentWidgets.get(i);
             int rowTop = this.selY + 4 + i * SEL_ROW_H - (int) this.selScroll;
             field.setX(this.selX + this.selW - FIELD_W - 8);
             field.setY(rowTop + (SEL_ROW_H - FIELD_H) / 2 - 1);
@@ -417,52 +417,52 @@ public final class ChatBlockPanel {
 
     /* ============================== 渲染 ============================== */
 
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (!this.open) {
             return;
         }
         if (this.stateEditing != null) {
-            this.drawStateEditor(context, mouseX, mouseY);
+            this.drawStateEditor(graphics, mouseX, mouseY);
             return;
         }
 
         this.hoverTip = null;
-        this.drawPanels(context, mouseX, mouseY);
+        this.drawPanels(graphics, mouseX, mouseY);
 
         // 参数行控件（同样没注册进 Screen，手动画）
         if (this.sourceButton != null) {
-            this.sourceButton.render(context, mouseX, mouseY, delta);
+            this.sourceButton.render(graphics, mouseX, mouseY, partialTick);
         }
         if (this.extra1Field != null) {
-            this.extra1Field.render(context, mouseX, mouseY, delta);
+            this.extra1Field.render(graphics, mouseX, mouseY, partialTick);
         }
         if (this.extra2Field != null) {
-            this.extra2Field.render(context, mouseX, mouseY, delta);
+            this.extra2Field.render(graphics, mouseX, mouseY, partialTick);
         }
 
         // 控件自己不会渲染（没注册进 Screen），这里按顺序手动画
         if (this.searchField != null) {
-            this.searchField.render(context, mouseX, mouseY, delta);
-            if (this.searchField.getText().isEmpty()) {
-                context.drawText(this.textRenderer,
-                        Text.translatable("wes.search").getString(),
+            this.searchField.render(graphics, mouseX, mouseY, partialTick);
+            if (this.searchField.getValue().isEmpty()) {
+                graphics.drawString(this.font,
+                        Component.translatable("wes.search").getString(),
                         this.listX + 4, this.listY - 16, 0x66FFFFFF, false);
             }
         }
-        for (TextFieldWidget field : this.percentWidgets) {
+        for (EditBox field : this.percentWidgets) {
             if (field.visible) {
-                field.render(context, mouseX, mouseY, delta);
+                field.render(graphics, mouseX, mouseY, partialTick);
             }
         }
         if (this.confirmButton != null) {
-            this.confirmButton.render(context, mouseX, mouseY, delta);
+            this.confirmButton.render(graphics, mouseX, mouseY, partialTick);
         }
         if (this.cancelButton != null) {
-            this.cancelButton.render(context, mouseX, mouseY, delta);
+            this.cancelButton.render(graphics, mouseX, mouseY, partialTick);
         }
 
         if (this.hoverTip != null) {
-            context.drawTooltip(this.textRenderer, this.hoverTip, mouseX, mouseY);
+            graphics.renderTooltip(this.font, this.hoverTip, mouseX, mouseY);
         }
     }
 
@@ -472,67 +472,67 @@ public final class ChatBlockPanel {
      * <p>之前这里是一个「态」字，CJK 字形在 16px 的框里又挤又偏下，
      * 而且英文环境下没意义。手绘图标不受字体影响，尺寸也精确可控。</p>
      */
-    private static void drawStateButton(DrawContext context, int x, int y, boolean hovered) {
-        context.fill(x, y, x + STATE_BTN_W, y + 16, hovered ? 0xFF3F6B4A : 0xFF2A2A2A);
-        context.drawBorder(x, y, STATE_BTN_W, 16, hovered ? 0xFF9BE3AE : 0xFF555555);
+    private static void drawStateButton(GuiGraphics graphics, int x, int y, boolean hovered) {
+        graphics.fill(x, y, x + STATE_BTN_W, y + 16, hovered ? 0xFF3F6B4A : 0xFF2A2A2A);
+        graphics.renderOutline(x, y, STATE_BTN_W, 16, hovered ? 0xFF9BE3AE : 0xFF555555);
 
         int left = x + 4;
         int width = STATE_BTN_W - 8;
         for (int i = 0; i < 3; i++) {
             int lineY = y + 4 + i * 4;
-            context.fill(left, lineY, left + width, lineY + 1, 0xFF9A9A9A);
+            graphics.fill(left, lineY, left + width, lineY + 1, 0xFF9A9A9A);
             int knobX = left + (i == 0 ? 1 : i == 1 ? 6 : 3);
-            context.fill(knobX, lineY - 1, knobX + 2, lineY + 2, 0xFFE8E8E8);
+            graphics.fill(knobX, lineY - 1, knobX + 2, lineY + 2, 0xFFE8E8E8);
         }
     }
 
-    private void drawPanels(DrawContext context, int mouseX, int mouseY) {
-        context.fill(this.px, this.py, this.px + this.pw, this.py + this.ph, COL_PANEL_BG);
+    private void drawPanels(GuiGraphics graphics, int mouseX, int mouseY) {
+        graphics.fill(this.px, this.py, this.px + this.pw, this.py + this.ph, COL_PANEL_BG);
 
-        context.drawText(this.textRenderer, this.title(), this.px + 6, this.py + 8, 0xFFFFFFFF, false);
+        graphics.drawString(this.font, this.title(), this.px + 6, this.py + 8, 0xFFFFFFFF, false);
 
         // 右上角标出这次触发的是哪条指令（//set、//replace、//sphere …），
         // 免得玩家在面板里选了半天才发现指令不是自己想要的。
         String cmd = this.command.trigger().trim();
-        context.drawText(this.textRenderer, cmd,
-                this.px + this.pw - 6 - this.textRenderer.getWidth(cmd), this.py + 8, COL_TEXT_SELECTED, false);
+        graphics.drawString(this.font, cmd,
+                this.px + this.pw - 6 - this.font.width(cmd), this.py + 8, COL_TEXT_SELECTED, false);
 
-        context.drawText(this.textRenderer,
-                Text.translatable("wes.selected", this.selectedBlocks.size()),
+        graphics.drawString(this.font,
+                Component.translatable("wes.selected", this.selectedBlocks.size()),
                 this.selX, this.listY - 16, COL_TEXT_DIM, false);
 
         // 参数行的文字标签（输入框和按钮自己会画）
         if (this.extra1Label != null) {
-            context.drawText(this.textRenderer, this.extra1Label,
+            graphics.drawString(this.font, this.extra1Label,
                     this.extra1LabelX, this.optY + 4, COL_TEXT, false);
         }
         if (this.extra2Label != null) {
-            context.drawText(this.textRenderer, this.extra2Label,
+            graphics.drawString(this.font, this.extra2Label,
                     this.extra2LabelX, this.optY + 4, COL_TEXT, false);
         }
 
-        this.drawBlockList(context, mouseX, mouseY);
-        this.drawSelectedList(context, mouseX, mouseY);
-        this.drawScrollbars(context);
+        this.drawBlockList(graphics, mouseX, mouseY);
+        this.drawSelectedList(graphics, mouseX, mouseY);
+        this.drawScrollbars(graphics);
 
         if (!this.statusMessage.isEmpty()) {
-            context.drawText(this.textRenderer, Text.literal(this.statusMessage),
+            graphics.drawString(this.font, Component.literal(this.statusMessage),
                     this.px + 6, this.py + this.ph - 20, COL_ERROR, false);
         } else if (this.pickingSource) {
-            context.drawText(this.textRenderer, Text.translatable("wes.hint.source"),
+            graphics.drawString(this.font, Component.translatable("wes.hint.source"),
                     this.px + 6, this.py + this.ph - 20, 0xFFFFD479, false);
         } else {
-            context.drawText(this.textRenderer, Text.translatable("wes.hint"),
+            graphics.drawString(this.font, Component.translatable("wes.hint"),
                     this.px + 6, this.py + this.ph - 20, COL_TEXT_DIM, false);
         }
     }
 
-    private Text title() {
-        return Text.translatable("wes.title");
+    private Component title() {
+        return Component.translatable("wes.title");
     }
 
-    private void drawBlockList(DrawContext context, int mouseX, int mouseY) {
-        context.enableScissor(this.listX, this.listY, this.listX + this.listW, this.listY + this.listH);
+    private void drawBlockList(GuiGraphics graphics, int mouseX, int mouseY) {
+        graphics.enableScissor(this.listX, this.listY, this.listX + this.listW, this.listY + this.listH);
 
         int first = Math.max(0, (int) (this.listScroll / ROW_H));
         int rows = this.listH / ROW_H + 2;
@@ -545,31 +545,31 @@ public final class ChatBlockPanel {
             boolean chosen = this.selectedBlocks.containsKey(block);
 
             if (hovered) {
-                context.fill(this.listX, y, this.listX + this.listW, y + ROW_H - 1, COL_ROW_HOVER);
+                graphics.fill(this.listX, y, this.listX + this.listW, y + ROW_H - 1, COL_ROW_HOVER);
             } else if (chosen) {
-                context.fill(this.listX, y, this.listX + this.listW, y + ROW_H - 1, COL_ROW_SELECTED);
+                graphics.fill(this.listX, y, this.listX + this.listW, y + ROW_H - 1, COL_ROW_SELECTED);
             }
             // 当前 //replace 的源方块：左侧一条黄边标出来
             if (block == this.sourceBlock) {
-                context.fill(this.listX, y, this.listX + 2, y + ROW_H - 1, 0xFFFFD479);
+                graphics.fill(this.listX, y, this.listX + 2, y + ROW_H - 1, 0xFFFFD479);
             }
 
-            context.drawItem(new ItemStack(block), this.listX + 2, y + 2);
-            String name = this.textRenderer.trimToWidth(block.getName().getString(), this.listW - 26);
+            graphics.renderItem(new ItemStack(block), this.listX + 2, y + 2);
+            String name = this.font.plainSubstrByWidth(block.getName().getString(), this.listW - 26);
             int color = block == this.sourceBlock ? 0xFFFFD479 : chosen ? COL_TEXT_SELECTED : COL_TEXT;
-            context.drawText(this.textRenderer, name, this.listX + 22, y + 6, color, false);
+            graphics.drawString(this.font, name, this.listX + 22, y + 6, color, false);
         }
 
-        context.disableScissor();
+        graphics.disableScissor();
 
         if (this.filtered.isEmpty()) {
-            context.drawText(this.textRenderer, Text.translatable("wes.empty"),
+            graphics.drawString(this.font, Component.translatable("wes.empty"),
                     this.listX + 4, this.listY + 4, COL_TEXT_DIM, false);
         }
     }
 
-    private void drawSelectedList(DrawContext context, int mouseX, int mouseY) {
-        context.enableScissor(this.selX, this.selY, this.selX + this.selW, this.selY + this.selH);
+    private void drawSelectedList(GuiGraphics graphics, int mouseX, int mouseY) {
+        graphics.enableScissor(this.selX, this.selY, this.selX + this.selW, this.selY + this.selH);
 
         int index = 0;
         for (Block block : this.selectedBlocks.keySet()) {
@@ -579,49 +579,49 @@ public final class ChatBlockPanel {
                 continue;
             }
             boolean hovered = isInside(mouseX, mouseY, this.selX, y, this.selW, SEL_ROW_H - 2);
-            context.fill(this.selX, y, this.selX + this.selW, y + SEL_ROW_H - 2,
+            graphics.fill(this.selX, y, this.selX + this.selW, y + SEL_ROW_H - 2,
                     hovered ? COL_ROW_HOVER : 0x18FFFFFF);
-            context.drawItem(new ItemStack(block), this.selX + 4, y + 4);
+            graphics.renderItem(new ItemStack(block), this.selX + 4, y + 4);
 
             int nameWidth = this.selW - 24 - FIELD_W - 8 - STATE_BTN_W - 8;
-            String name = this.textRenderer.trimToWidth(block.getName().getString(), Math.max(10, nameWidth));
-            context.drawText(this.textRenderer, name, this.selX + 24, y + 8, 0xFFEEEEEE, false);
+            String name = this.font.plainSubstrByWidth(block.getName().getString(), Math.max(10, nameWidth));
+            graphics.drawString(this.font, name, this.selX + 24, y + 8, 0xFFEEEEEE, false);
 
             if (hasProperties(block)) {
                 int bx = this.stateButtonX();
                 int by = y + 4;
                 boolean hover = isInside(mouseX, mouseY, bx, by, STATE_BTN_W, 16);
-                drawStateButton(context, bx, by, hover);
+                drawStateButton(graphics, bx, by, hover);
                 if (hover) {
-                    this.hoverTip = Text.translatable("wes.state.button");
+                    this.hoverTip = Component.translatable("wes.state.button");
                 }
             }
         }
 
-        context.disableScissor();
+        graphics.disableScissor();
 
         if (this.selectedBlocks.isEmpty()) {
-            context.drawText(this.textRenderer, Text.translatable("wes.selected.empty"),
+            graphics.drawString(this.font, Component.translatable("wes.selected.empty"),
                     this.selX + 4, this.selY + 4, COL_TEXT_DIM, false);
         }
     }
 
-    private void drawScrollbars(DrawContext context) {
-        drawScrollbar(context, this.listX, this.listY, this.listW, this.listH,
+    private void drawScrollbars(GuiGraphics graphics) {
+        drawScrollbar(graphics, this.listX, this.listY, this.listW, this.listH,
                 this.listScroll, this.filtered.size() * ROW_H);
-        drawScrollbar(context, this.selX, this.selY, this.selW, this.selH,
+        drawScrollbar(graphics, this.selX, this.selY, this.selW, this.selH,
                 this.selScroll, this.selectedBlocks.size() * SEL_ROW_H + 8);
     }
 
-    private void drawScrollbar(DrawContext context, int x, int y, int w, int h,
+    private void drawScrollbar(GuiGraphics graphics, int x, int y, int w, int h,
                                double scroll, int contentHeight) {
         if (contentHeight <= h) {
             return;
         }
         int barH = Math.max(12, (int) ((double) h * h / contentHeight));
         int barY = y + (int) ((h - barH) * (scroll / (contentHeight - h)));
-        context.fill(x + w - 4, y, x + w, y + h, 0x40000000);
-        context.fill(x + w - 4, barY, x + w, barY + barH, 0xFF9A9A9A);
+        graphics.fill(x + w - 4, y, x + w, y + h, 0x40000000);
+        graphics.fill(x + w - 4, barY, x + w, barY + barH, 0xFF9A9A9A);
     }
 
     /* ============================== 输入 ============================== */
@@ -640,7 +640,7 @@ public final class ChatBlockPanel {
 
         // 1) 控件优先：输入框先设焦点再转发点击（这样光标位置才算得准）
         if (this.sourceButton != null && this.sourceButton.mouseClicked(mouseX, mouseY, button)) {
-            return true; // ButtonWidget 内部已经切了 pickingSource
+            return true; // Button 内部已经切了 pickingSource
         }
         if (this.extra1Field != null && this.extra1Field.mouseClicked(mouseX, mouseY, button)) {
             this.setFocus(this.extra1Field);
@@ -654,14 +654,14 @@ public final class ChatBlockPanel {
             this.setFocus(this.searchField);
             return true;
         }
-        for (TextFieldWidget field : this.percentWidgets) {
+        for (EditBox field : this.percentWidgets) {
             if (field.visible && field.mouseClicked(mouseX, mouseY, button)) {
                 this.setFocus(field);
                 return true;
             }
         }
         if (this.confirmButton != null && this.confirmButton.mouseClicked(mouseX, mouseY, button)) {
-            return true; // ButtonWidget 内部已经触发 onPress
+            return true; // Button 内部已经触发 onPress
         }
         if (this.cancelButton != null && this.cancelButton.mouseClicked(mouseX, mouseY, button)) {
             return true;
@@ -754,7 +754,7 @@ public final class ChatBlockPanel {
             return true;
         }
         // 其余按键转发给当前有焦点的控件（退格、方向键、Ctrl+V 都靠它）
-        Element focused = this.parent.getFocused();
+        GuiEventListener focused = this.parent.getFocused();
         if (focused != null && focused != this.chatField) {
             return focused.keyPressed(keyCode, scanCode, modifiers);
         }
@@ -767,7 +767,7 @@ public final class ChatBlockPanel {
         return this.open && isInside(mouseX, mouseY, this.px, this.py, this.pw, this.ph);
     }
 
-    private void setFocus(Element element) {
+    private void setFocus(GuiEventListener element) {
         this.parent.setFocused(element);
     }
 
@@ -780,7 +780,7 @@ public final class ChatBlockPanel {
             }
         } else {
             this.selectedBlocks.put(block, 0);
-            this.selectedStates.put(block, block.getDefaultState());
+            this.selectedStates.put(block, block.defaultBlockState());
         }
         this.statusMessage = "";
         this.rebuildSelection();
@@ -798,7 +798,7 @@ public final class ChatBlockPanel {
         for (int i = 0; i < this.percentWidgets.size(); i++) {
             if (this.percentWidgets.get(i).isFocused()) {
                 focusedBlock = this.percentOrder.get(i);
-                cursor = this.percentWidgets.get(i).getCursor();
+                cursor = this.percentWidgets.get(i).getCursorPosition();
                 break;
             }
         }
@@ -810,9 +810,9 @@ public final class ChatBlockPanel {
         if (focusedBlock != null) {
             int index = this.percentOrder.indexOf(focusedBlock);
             if (index >= 0) {
-                TextFieldWidget field = this.percentWidgets.get(index);
+                EditBox field = this.percentWidgets.get(index);
                 this.setFocus(field);
-                field.setCursor(MathHelper.clamp(cursor, 0, field.getText().length()));
+                field.setCursorPosition(Mth.clamp(cursor, 0, field.getValue().length()));
                 return;
             }
         }
@@ -835,12 +835,12 @@ public final class ChatBlockPanel {
      */
     private void confirm() {
         if (this.selectedBlocks.isEmpty()) {
-            this.statusMessage = Text.translatable("wes.err.empty").getString();
+            this.statusMessage = Component.translatable("wes.err.empty").getString();
             return;
         }
         // //replace 必须先知道要替换掉什么，否则拼出来是残废指令
         if (this.command.needsSource() && this.sourceBlock == null) {
-            this.statusMessage = Text.translatable("wes.err.source").getString();
+            this.statusMessage = Component.translatable("wes.err.source").getString();
             return;
         }
 
@@ -860,7 +860,7 @@ public final class ChatBlockPanel {
         }
 
         if (used > 100) {
-            this.statusMessage = Text.translatable("wes.err.over", used).getString();
+            this.statusMessage = Component.translatable("wes.err.over", used).getString();
             return;
         }
 
@@ -885,7 +885,7 @@ public final class ChatBlockPanel {
         }
 
         if (ids.isEmpty()) {
-            this.statusMessage = Text.translatable("wes.err.empty").getString();
+            this.statusMessage = Component.translatable("wes.err.empty").getString();
             return;
         }
 
@@ -909,7 +909,7 @@ public final class ChatBlockPanel {
         }
 
         // 按指令签名拼参数：replace 的 <from> 永远在最前；hollow 的厚度在图案前；
-        // 其余（line / sphere / cyl / pyramid / forest）参数都在图案后面。
+        // 其余（line / sphere / cyl / pyramid）参数都在图案后面。
         List<String> args = new ArrayList<>();
         if (this.command.needsSource()) {
             args.add(BlockCatalog.commandId(this.sourceBlock));
@@ -933,32 +933,32 @@ public final class ChatBlockPanel {
 
         String result = "//" + this.command.id() + " " + String.join(" ", args);
         if (result.length() > 240) {
-            this.statusMessage = Text.translatable("wes.err.long", result.length()).getString();
+            this.statusMessage = Component.translatable("wes.err.long", result.length()).getString();
             return;
         }
 
         // 只回填，不发送 —— 玩家自己按回车，还能继续改
-        this.chatField.setText(result);
-        this.chatField.setCursorToEnd();
+        this.chatField.setValue(result);
+        this.chatField.setCursorPosition(result.length());
         this.close();
     }
 
     /** 读一个可选数字参数；空串当作「没填」，拼指令时整段省略。 */
-    private static String readNumber(TextFieldWidget field) {
+    private static String readNumber(EditBox field) {
         if (field == null) {
             return null;
         }
-        String text = field.getText().trim();
+        String text = field.getValue().trim();
         return text.isEmpty() ? null : text;
     }
 
     private int readPercent(int index) {
-        TextFieldWidget field = this.percentWidgets.get(index);
-        if (field == null || field.getText().isBlank()) {
+        EditBox field = this.percentWidgets.get(index);
+        if (field == null || field.getValue().isBlank()) {
             return 0;
         }
         try {
-            return MathHelper.clamp(Integer.parseInt(field.getText().trim()), 0, 100);
+            return Mth.clamp(Integer.parseInt(field.getValue().trim()), 0, 100);
         } catch (NumberFormatException e) {
             return 0;
         }
@@ -972,7 +972,7 @@ public final class ChatBlockPanel {
     }
 
     private static boolean hasProperties(Block block) {
-        return !block.getStateManager().getProperties().isEmpty();
+        return !block.getStateDefinition().getProperties().isEmpty();
     }
 
     /**
@@ -985,11 +985,11 @@ public final class ChatBlockPanel {
         if (state == null) {
             return "";
         }
-        BlockState defaults = state.getBlock().getDefaultState();
+        BlockState defaults = state.getBlock().defaultBlockState();
         StringBuilder builder = new StringBuilder();
         for (Property<?> property : state.getProperties()) {
-            Object value = state.get(property);
-            Object defaultValue = defaults.get(property);
+            Object value = valueOf(state, property);
+            Object defaultValue = valueOf(defaults, property);
             if (!value.equals(defaultValue)) {
                 if (builder.length() > 0) {
                     builder.append(',');
@@ -1000,24 +1000,36 @@ public final class ChatBlockPanel {
         return builder.length() == 0 ? "" : "[" + builder + "]";
     }
 
+    /**
+     * 读一个属性值。
+     *
+     * <p>写成 raw type 是故意的：{@code Property<T extends Comparable<T>>} 配上
+     * {@code Property<?>} 通配符时，javac 推断不出类型参数，直接写
+     * {@code state.getValue(property)} 会编译不过。</p>
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Object valueOf(BlockState state, Property property) {
+        return state.getValue(property);
+    }
+
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static String valueName(Property property, BlockState state) {
-        return property.name(state.get(property));
+        return property.getName(state.getValue(property));
     }
 
     /** 属性值循环切换：dir = -1 上一个，+1 下一个。 */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static BlockState cycleProperty(BlockState state, Property property, int dir) {
-        List<Comparable> values = new ArrayList<>(property.getValues());
+        List<Comparable> values = new ArrayList<>(property.getPossibleValues());
         if (values.isEmpty()) {
             return state;
         }
-        int index = values.indexOf(state.get(property));
+        int index = values.indexOf(state.getValue(property));
         if (index < 0) {
             index = 0;
         }
         int next = (index + dir + values.size()) % values.size();
-        return state.with(property, values.get(next));
+        return state.setValue(property, values.get(next));
     }
 
     private void clampPropScroll() {
@@ -1026,35 +1038,35 @@ public final class ChatBlockPanel {
             this.propScroll = 0.0D;
             return;
         }
-        int count = block.getStateManager().getProperties().size();
+        int count = block.getStateDefinition().getProperties().size();
         int viewHeight = (this.py + this.ph - 30) - (this.py + 34);
         double max = Math.max(0.0D, count * (double) PROP_ROW_H - viewHeight);
-        this.propScroll = MathHelper.clamp(this.propScroll, 0.0D, max);
+        this.propScroll = Mth.clamp(this.propScroll, 0.0D, max);
     }
 
-    private void drawStateEditor(DrawContext context, int mouseX, int mouseY) {
+    private void drawStateEditor(GuiGraphics graphics, int mouseX, int mouseY) {
         Block block = this.stateEditing;
-        BlockState state = this.selectedStates.getOrDefault(block, block.getDefaultState());
+        BlockState state = this.selectedStates.getOrDefault(block, block.defaultBlockState());
 
-        context.fill(this.px, this.py, this.px + this.pw, this.py + this.ph, COL_PANEL_BG);
+        graphics.fill(this.px, this.py, this.px + this.pw, this.py + this.ph, COL_PANEL_BG);
 
-        context.drawText(this.textRenderer, Text.translatable("wes.state.title", block.getName()),
+        graphics.drawString(this.font, Component.translatable("wes.state.title", block.getName()),
                 this.px + 6, this.py + 8, 0xFFFFFFFF, false);
 
         // 状态编辑页顶部那行「预览」：没有非默认属性时显示方块 ID 本身，
         // 显示规则跟实际拼指令一致（原版不带 minecraft: 前缀）。
         String suffix = stateSuffix(state);
-        context.drawText(this.textRenderer,
-                Text.literal(suffix.isEmpty() ? BlockCatalog.commandId(block) : suffix),
+        graphics.drawString(this.font,
+                Component.literal(suffix.isEmpty() ? BlockCatalog.commandId(block) : suffix),
                 this.px + 6, this.py + 20, COL_TEXT_DIM, false);
 
         int listTop = this.py + 34;
         int listBottom = this.py + this.ph - 30;
         int rowX = this.px + 6;
         int rowW = this.pw - 12;
-        List<Property<?>> properties = new ArrayList<>(block.getStateManager().getProperties());
+        List<Property<?>> properties = new ArrayList<>(block.getStateDefinition().getProperties());
 
-        context.enableScissor(rowX, listTop, rowX + rowW, listBottom);
+        graphics.enableScissor(rowX, listTop, rowX + rowW, listBottom);
         for (int i = 0; i < properties.size(); i++) {
             int y = listTop + i * PROP_ROW_H - (int) this.propScroll;
             if (y + PROP_ROW_H < listTop || y > listBottom) {
@@ -1062,28 +1074,28 @@ public final class ChatBlockPanel {
             }
             Property<?> property = properties.get(i);
             if (isInside(mouseX, mouseY, rowX, y, rowW, PROP_ROW_H - 1)) {
-                context.fill(rowX, y, rowX + rowW, y + PROP_ROW_H - 1, COL_ROW_HOVER);
+                graphics.fill(rowX, y, rowX + rowW, y + PROP_ROW_H - 1, COL_ROW_HOVER);
             }
-            context.drawText(this.textRenderer, property.getName(), rowX + 4, y + 5, COL_TEXT, false);
+            graphics.drawString(this.font, property.getName(), rowX + 4, y + 5, COL_TEXT, false);
 
             int leftX = rowX + rowW - 150;
             int rightX = rowX + rowW - 14;
-            context.drawText(this.textRenderer, "<", leftX, y + 5, 0xFFFFD479, false);
-            context.drawText(this.textRenderer, ">", rightX, y + 5, 0xFFFFD479, false);
-            context.drawText(this.textRenderer, valueName(property, state), leftX + 10, y + 5, COL_TEXT_SELECTED, false);
+            graphics.drawString(this.font, "<", leftX, y + 5, 0xFFFFD479, false);
+            graphics.drawString(this.font, ">", rightX, y + 5, 0xFFFFD479, false);
+            graphics.drawString(this.font, valueName(property, state), leftX + 10, y + 5, COL_TEXT_SELECTED, false);
         }
-        context.disableScissor();
+        graphics.disableScissor();
 
         int buttonY = this.py + this.ph - 26;
-        drawMiniButton(context, Text.translatable("wes.state.reset"), this.px + this.pw - 200, buttonY, 90, mouseX, mouseY);
-        drawMiniButton(context, Text.translatable("wes.back"), this.px + this.pw - 100, buttonY, 90, mouseX, mouseY);
+        drawMiniButton(graphics, Component.translatable("wes.state.reset"), this.px + this.pw - 200, buttonY, 90, mouseX, mouseY);
+        drawMiniButton(graphics, Component.translatable("wes.back"), this.px + this.pw - 100, buttonY, 90, mouseX, mouseY);
     }
 
-    private void drawMiniButton(DrawContext context, Text label, int x, int y, int w, int mouseX, int mouseY) {
+    private void drawMiniButton(GuiGraphics graphics, Component label, int x, int y, int w, int mouseX, int mouseY) {
         boolean hovered = isInside(mouseX, mouseY, x, y, w, 18);
-        context.fill(x, y, x + w, y + 18, hovered ? 0xFF3F6B4A : 0xFF2A2A2A);
-        context.drawBorder(x, y, w, 18, 0xFF555555);
-        context.drawCenteredTextWithShadow(this.textRenderer, label, x + w / 2, y + 5, 0xFFEEEEEE);
+        graphics.fill(x, y, x + w, y + 18, hovered ? 0xFF3F6B4A : 0xFF2A2A2A);
+        graphics.renderOutline(x, y, w, 18, 0xFF555555);
+        graphics.drawCenteredString(this.font, label, x + w / 2, y + 5, 0xFFEEEEEE);
     }
 
     private boolean clickStateEditor(double mouseX, double mouseY) {
@@ -1091,13 +1103,13 @@ public final class ChatBlockPanel {
         if (block == null) {
             return false;
         }
-        BlockState state = this.selectedStates.getOrDefault(block, block.getDefaultState());
+        BlockState state = this.selectedStates.getOrDefault(block, block.defaultBlockState());
 
         int listTop = this.py + 34;
         int listBottom = this.py + this.ph - 30;
         int rowX = this.px + 6;
         int rowW = this.pw - 12;
-        List<Property<?>> properties = new ArrayList<>(block.getStateManager().getProperties());
+        List<Property<?>> properties = new ArrayList<>(block.getStateDefinition().getProperties());
 
         for (int i = 0; i < properties.size(); i++) {
             int y = listTop + i * PROP_ROW_H - (int) this.propScroll;
@@ -1119,7 +1131,7 @@ public final class ChatBlockPanel {
 
         int buttonY = this.py + this.ph - 26;
         if (isInside(mouseX, mouseY, this.px + this.pw - 200, buttonY, 90, 18)) {
-            this.selectedStates.put(block, block.getDefaultState());
+            this.selectedStates.put(block, block.defaultBlockState());
             return true;
         }
         if (isInside(mouseX, mouseY, this.px + this.pw - 100, buttonY, 90, 18)) {

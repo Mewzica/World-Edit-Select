@@ -1,6 +1,6 @@
 # World Edit Select (WES)
 
-A client-side Minecraft Fabric mod that turns WorldEdit's block commands into a visual block picker — right inside the chat box.
+A client-side Minecraft Forge mod that turns WorldEdit's block commands into a visual block picker — right inside the chat box.
 
 Instead of memorizing block IDs and percentage syntax, type `//set ` in chat and a picker opens above the input line. Click the blocks you want, assign percentages (or leave them blank to auto-balance), and WES writes a ready-to-send WorldEdit command back into your chat input.
 
@@ -61,14 +61,14 @@ It is not limited to `//set`. Every WorldEdit command that takes a block pattern
 | | |
 | --- | --- |
 | Minecraft | 1.20.1 |
-| Loader | Fabric Loader 0.14+ |
-| Dependency | [WorldEdit](https://modrinth.com/mod/worldedit) 7.2+ (Fabric), client side |
+| Loader | Forge 47.2+ for Minecraft 1.20.1 |
+| Dependency | [WorldEdit](https://modrinth.com/mod/worldedit) 7.2+ (Forge), client side |
 | Java | 17 |
 
 ## Installation
 
-1. Install Fabric Loader for Minecraft 1.20.1.
-2. Drop `worldedit-fabric` and `wes-<version>+mc1.20.1.jar` into `.minecraft/mods`.
+1. Install Forge 47.2+ for Minecraft 1.20.1.
+2. Drop `worldedit-forge` and `wes-<version>+mc1.20.1.jar` into `.minecraft/mods`.
 3. Launch the game. No configuration needed.
 
 ## Building
@@ -77,24 +77,36 @@ It is not limited to `//set`. Every WorldEdit command that takes a block pattern
 ./gradlew build
 ```
 
-The remapped jar is written to `build/libs/`.
+The reobfuscated jar is written to `build/libs/`.
 
 The project compiles against `com.sk89q.worldedit:worldedit-core` (compile-only). WorldEdit is **not** bundled — the classes are provided at runtime by the WorldEdit mod you install.
 
 ## How it works
 
-- `TextFieldWidgetMixin` hooks `TextFieldWidget#onChanged` — the single funnel that keyboard input, pasting and IME commits all go through (note that `write` bypasses `setText` entirely, so hooking `setText` would miss typing).
 - `ChatScreenMixin` forwards render / mouse / scroll / key events to the panel and draws it at the tail of `ChatScreen#render`.
-- The panel's widgets are **not** registered as screen children; focus is handed over with `ParentElement#setFocus`, which lets the inherited `charTyped` default route characters into the field being edited.
-- Blocks are collected from WorldEdit's `BlockType.REGISTRY` when available, falling back to the vanilla `Registries.BLOCK` (WorldEdit only populates its registry when a server platform boots, which never happens on a remote-server client).
+- The input is watched by **polling** at the head of `ChatScreen#render` instead of a text-change callback. Forge's `EditBox` has no single hook that covers both typing (`insertText`) and programmatic writes (`setValue`), and guessing a private method name would only fail at runtime. The chat screen is only rendered while chat is open, so the poll is naturally scoped, and it catches typing, pasting and IME commits alike.
+- The panel's widgets are **not** registered as screen children; focus is handed over with `ContainerEventHandler#setFocused`, which lets the inherited `charTyped` default route characters into the field being edited.
+- Blocks are collected from WorldEdit's `BlockType.REGISTRY` when available, falling back to the vanilla `BuiltInRegistries.BLOCK` (WorldEdit only populates its registry when a server platform boots, which never happens on a remote-server client).
 - The command table lives in `BlockCommand` and was written against the real signatures in `RegionCommands` / `GenerationCommands` (verified with `javap`), which is why `//hollow` takes its thickness first while `//cyl` takes it last.
 - A single selected block is emitted as a bare ID. WorldEdit's `RandomPatternParser` starts with `if (patterns.size() == 1) return null;`, so `100%stone` is parsed as a block *name* and fails — percentages only work with two or more entries.
 
 ## Compatibility
 
-The panel is drawn from `ChatScreen#render`, which is enough for vanilla chat. Chat mods that replace the chat screen entirely and deliberately skip `super.render` — AtomChat is one — would otherwise get an invisible panel, so WES ships a second, optional mixin for `AtomChatScreen`.
+The panel is drawn from `ChatScreen#render`, which is enough for vanilla chat. Chat mods that replace the chat screen entirely and deliberately skip `super.render` would get an invisible panel; the Fabric branch ships an optional AtomChat shim for that case, but there is no equivalent here — the shim keys off intermediary method names, which do not exist under Forge's SRG runtime. On this branch the panel only appears on the vanilla chat screen.
 
-That mixin is best-effort by design: its injections use `require = 0`, so if AtomChat renames those methods the panel simply stops appearing instead of crashing the game. It targets the intermediary names (`method_25394`, …) because a mod class's overrides of Minecraft methods get renamed on remap, and a `targets = "..."` mixin gets no refmap entry to translate `render` for us.
+## Porting notes
+
+The Fabric branch and this one are the same mod built against two loaders, so the interesting differences are all mechanical:
+
+| | Fabric | Forge |
+| --- | --- | --- |
+| Build | `fabric-loom` (Kotlin DSL) | ForgeGradle 6 + MixinGradle (Groovy DSL) |
+| Mappings | Yarn | Mojang official (ForgeGradle reobfuscates the jar to SRG) |
+| Entrypoint | `ClientModInitializer` | `@Mod` constructor |
+| Metadata | `fabric.mod.json` | `META-INF/mods.toml` + `pack.mcmeta` |
+| Render context | `DrawContext` | `GuiGraphics` |
+| Text box | `TextFieldWidget` (`setText` / `getText`) | `EditBox` (`setValue` / `getValue`) |
+| Registry | `Registries.BLOCK` | `BuiltInRegistries.BLOCK` |
 
 ## License
 

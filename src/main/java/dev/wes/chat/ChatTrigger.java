@@ -1,29 +1,30 @@
 package dev.wes.chat;
 
 import dev.wes.command.BlockCommand;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ChatScreen;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ChatScreen;
 
 /**
  * 触发器的唯一入口。
  *
- * <p>为什么要把判断逻辑单独抽出来？因为「文本变化」在 1.20.1 里可能来自三个地方：</p>
- * <ol>
- *   <li>{@code TextFieldWidget#write} —— 键盘打字、Ctrl+V 粘贴；</li>
- *   <li>{@code TextFieldWidget#setText} —— 输入法(IME)上屏、历史消息回填；</li>
- *   <li>{@code ChatScreen#keyPressed} —— 回车前的一次兜底检查。</li>
- * </ol>
- * <p>三处都会调用 {@code TextFieldWidget#onChanged}，所以真正挂载点是
- * {@link dev.wes.mixin.TextFieldWidgetMixin}，这里只负责「认出是哪条指令 + 防重入 + 开面板」。</p>
+ * <h2>Forge 分支为什么不再混入 EditBox</h2>
+ * <p>Fabric 分支挂的是 {@code TextFieldWidget#onChanged} —— 那是 Yarn 名字下的
+ * 私有回调，官方映射里没有稳定的对应方法（1.20.1 的 {@code EditBox} 里
+ * 打字走 {@code insertText}、程序赋值走 {@code setValue}，没有一个公共的私有
+ * 回调可以挂），硬猜方法名只会在运行期崩。</p>
+ *
+ * <p>所以这里改成<b>每帧轮询</b>：{@code ChatScreenMixin} 在
+ * {@code ChatScreen#render} 的开头把输入框当前内容递进来。聊天界面只有打开时
+ * 才渲染，轮询范围天然被限制在「聊天框正开着」这一种情况；一次字符串比较的
+ * 开销可以忽略，而打字、粘贴、输入法上屏、历史回填全都能被覆盖。</p>
  */
 public final class ChatTrigger {
 
     /**
      * 防重入闸门。
      *
-     * <p>同一次按键可能同时经过 onChanged 和 keyPressed 两个钩子，
-     * 不加闸门会连开两次面板。用 volatile 是因为
-     * {@link MinecraftClient#execute} 会在主线程任务队列里晚一拍执行。</p>
+     * <p>同一帧里 render 开头和 keyPressed 都可能命中，不加闸门会连开两次面板。
+     * 用 volatile 是因为 {@link Minecraft#execute} 会在主线程任务队列里晚一拍执行。</p>
      */
     private static volatile boolean firing = false;
 
@@ -64,9 +65,9 @@ public final class ChatTrigger {
             return;
         }
 
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         // 必须校验：可能已经有别的钩子先一步把界面换掉了
-        if (client.currentScreen != screen || client.player == null) {
+        if (client.screen != screen || client.player == null) {
             return;
         }
         if (!(screen instanceof ChatPanelHolder holder) || holder.wes$isPanelOpen()) {
@@ -75,11 +76,11 @@ public final class ChatTrigger {
 
         firing = true;
 
-        // 延后一 tick 再动手：此刻正处在 TextFieldWidget.onChanged 的回调里，
-        // 直接 setText("") 会在同一个方法栈内重入文本框，光标/选区状态容易错乱。
+        // 延后一 tick 再动手：此刻正处在渲染 / 按键的回调里，
+        // 直接 setValue("") 会在同一个方法栈内重入输入框，光标状态容易错乱。
         client.execute(() -> {
             firing = false;
-            if (client.currentScreen == screen && screen instanceof ChatPanelHolder h) {
+            if (client.screen == screen && screen instanceof ChatPanelHolder h) {
                 h.wes$openPanel(command);
             }
         });

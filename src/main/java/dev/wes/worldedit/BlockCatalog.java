@@ -2,10 +2,10 @@ package dev.wes.worldedit;
 
 import com.sk89q.worldedit.world.block.BlockType;
 import dev.wes.WesClient;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -24,12 +24,16 @@ import java.util.Set;
  * 它实现了 {@code Iterable<BlockType>}，直接 for-each 即可。</p>
  *
  * <h2>为什么还要兜底到原版注册表</h2>
- * <p>WorldEdit 的 Fabric 模组只在 <b>SERVER_STARTING</b>（也就是开单人存档 /
- * 开 LAN 房）时才会把方块灌进 {@code BlockType.REGISTRY}。
- * 玩家连「别人开的服务器」时，客户端这边的 WorldEdit 实例是个空壳，
- * 注册表里一个方块都没有。这时候如果只信 WorldEdit API，界面会全空。
- * 所以这里先试 WorldEdit，空了就退回 {@code Registries.BLOCK} —— 两者的
- * 方块 ID 是同一套（{@code minecraft:stone} 之类），最终拼出来的指令完全一样。</p>
+ * <p>WorldEdit 的模组只在平台启动（开单人存档 / 开 LAN 房）时才会把方块灌进
+ * {@code BlockType.REGISTRY}。玩家连「别人开的服务器」时，客户端这边的
+ * WorldEdit 实例是个空壳，注册表里一个方块都没有；这时候如果只信 WorldEdit
+ * API，界面会全空。所以先试 WorldEdit，空了就退回 {@code BuiltInRegistries.BLOCK}
+ * —— 两者的方块 ID 是同一套（{@code minecraft:stone} 之类），
+ * 最终拼出来的指令完全一样。</p>
+ *
+ * <p>那段 for-each 放在 {@code try} 里也有第二层意义：WorldEdit 没装时
+ * {@code BlockType} 这个类根本不存在，加载它抛的 {@code NoClassDefFoundError}
+ * 会在同一个 try 里被接住，面板退化成纯原版方块表而不是直接崩游戏。</p>
  */
 public final class BlockCatalog {
 
@@ -54,13 +58,13 @@ public final class BlockCatalog {
             }
         } catch (Throwable t) {
             // WorldEdit 未初始化时 Registry 会抛 IllegalStateException，
-            // 这里必须 catch Throwable：不同版本抛的异常类型不一样。
+            // 没装 WorldEdit 时抛 NoClassDefFoundError——这里必须 catch Throwable。
             WesClient.LOGGER.warn("[wes] WorldEdit 方块注册表不可用，改用原版注册表", t);
         }
 
         // ---- 方案 B：原版注册表（连远程服务器时的唯一可用来源）----
         if (result.isEmpty()) {
-            for (Block block : Registries.BLOCK) {
+            for (Block block : BuiltInRegistries.BLOCK) {
                 if (!isAir(block)) {
                     result.add(block);
                 }
@@ -87,17 +91,17 @@ public final class BlockCatalog {
         // getId() 在 7.4 被标了 @Deprecated(forRemoval)，但 7.2/7.3 只有它，
         // 为了跨版本兼容继续用它；7.4+ 可以用 id()。
         String rawId = type.getId();
-        Identifier id = Identifier.tryParse(rawId);
+        ResourceLocation id = ResourceLocation.tryParse(rawId);
         if (id == null) {
             return null;
         }
-        Block block = Registries.BLOCK.get(id);
+        Block block = BuiltInRegistries.BLOCK.get(id);
         return isAir(block) ? null : block;
     }
 
     /** 方块 ID，例如 {@code minecraft:stone}。用于排序和搜索匹配。 */
     public static String idOf(Block block) {
-        return Registries.BLOCK.getId(block).toString();
+        return BuiltInRegistries.BLOCK.getKey(block).toString();
     }
 
     /**
@@ -112,7 +116,7 @@ public final class BlockCatalog {
      * （例如 {@code create:cogwheel}），省掉就解析不出来了。</p>
      */
     public static String commandId(Block block) {
-        Identifier id = Registries.BLOCK.getId(block);
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
         return "minecraft".equals(id.getNamespace()) ? id.getPath() : id.toString();
     }
 

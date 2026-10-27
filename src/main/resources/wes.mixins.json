@@ -3,11 +3,9 @@
   "minVersion": "0.8",
   "package": "dev.wes.mixin",
   "compatibilityLevel": "JAVA_17",
-  "refmap": "wes-refmap.json",
+  "refmap": "wes.refmap.json",
   "client": [
-    "AtomChatScreenMixin",
-    "ChatScreenMixin",
-    "TextFieldWidgetMixin"
+    "ChatScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1
