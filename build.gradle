@@ -26,6 +26,10 @@ tasks.withType(net.neoforged.gradle.common.runtime.tasks.JavaSourceTransformer).
     }
 }
 
+// Mixin 说明：NeoForge 从 1.20.2 起运行期就用 Mojang 官方名，本工程编译期也是官方名，
+// 注入点和目标方法名一一对应，不需要 refmap 做二次翻译。所以这里不装 MixinGradle，
+// wes.mixins.json 里也不写 "refmap"——写了只会指向一个永远不存在的文件。
+// （1.20.1 的两个分支运行期是 SRG 名，那两个分支才需要并会生成 wes.refmap.json。）
 runs {
     client {
         systemProperty 'forge.logging.markers', ''
