@@ -54,9 +54,11 @@ dependencies {
     // 运行期真正的实现由玩家安装的 WorldEdit 模组提供，不打包、不重映射。
     compileOnly "com.sk89q.worldedit:worldedit-core:${worldedit_version}"
 
-    // NeoForge 运行期自带 Mixin，这里只要编译期的注解与注解处理器
+    // NeoForge 运行期自带 Mixin，这里只要编译期的注解。
+    // 故意不挂 mixin 的注解处理器：它唯一的产出是 refmap，而这条分支运行期就是官方名，
+    // 没有可翻译的东西。挂上反而会让它在编译期去找 MCP/SRG 映射表
+    // （"Unable to locate obfuscation mapping for @Inject target ..."）而报错。
     compileOnly 'org.spongepowered:mixin:0.8.5'
-    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 tasks.withType(JavaCompile).configureEach {
