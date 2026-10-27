@@ -1,8 +1,8 @@
 plugins {
     id 'java'
-    // ModDevGradle：NeoForge 20.2+（含 1.20.4）的官方推荐构建插件。
-    // 它取代了 1.20.1 时代的 ForgeGradle，坐标也从 net.neoforged:forge 换成了 net.neoforged:neoforge。
-    id 'net.neoforged.moddev' version '1.0.23'
+    // NeoGradle 7：NeoForge 1.20.4 官方 MDK（MDK-1.20.4-NeoGradle）用的就是它。
+    // ModDevGradle 要 NeoForge 的 moddev-bundle 能力，20.4 这一代还没有。
+    id 'net.neoforged.gradle.userdev' version '7.1.39'
 }
 
 version = "${mod_version}+mc${minecraft_version}"
@@ -18,24 +18,20 @@ java {
     }
 }
 
-neoForge {
-    // 这里只写 NeoForge 自己的版本号（20.4.237）。ModDevGradle 解析的是
-    // net.neoforged:neoforge:<version>，加 "1.20.4-" 前缀会找不到坐标。
-    version = "${neoforge_version}"
-
-    runs {
-        client {
-            client()
-            gameDirectory = project.file('run')
-            // 开发环境里 Mixin 的 refmap 需要按运行时映射重映射一次
-            systemProperty 'mixin.env.remapRefMap', 'true'
-        }
+// NeoGradle 用 JavaSourceTransformer 处理 Minecraft 源码，它自己需要 Java 21 才能跑，
+// 而模组本身仍然编译到 17。CI 上只有 JDK 17，所以让它按需取一个 21 的工具链。
+tasks.withType(net.neoforged.gradle.common.runtime.tasks.JavaSourceTransformer).configureEach {
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
     }
+}
 
-    mods {
-        wes {
-            sourceSet sourceSets.main
-        }
+runs {
+    client {
+        systemProperty 'forge.logging.markers', ''
+        systemProperty 'forge.logging.console.level', 'debug'
+        workingDirectory project.layout.projectDirectory.dir('run')
+        modSource project.sourceSets.main
     }
 }
 
@@ -46,12 +42,15 @@ repositories {
 }
 
 dependencies {
+    // NeoGradle 的 userdev：坐标是 net.neoforged:neoforge:<neo 版本号>
+    implementation "net.neoforged:neoforge:${neoforge_version}"
+
     // 只需要 WorldEdit 的「核心 API」（BlockType / BlockFactory / Registry 等）。
     // 这些类与 Minecraft 版本无关，所以直接拿 worldedit-core 编译即可；
     // 运行期真正的实现由玩家安装的 WorldEdit 模组提供，不打包、不重映射。
     compileOnly "com.sk89q.worldedit:worldedit-core:${worldedit_version}"
 
-    // NeoForge 运行期自带 Mixin，这里只需要编译期的注解与注解处理器。
+    // NeoForge 运行期自带 Mixin，这里只要编译期的注解与注解处理器
     compileOnly 'org.spongepowered:mixin:0.8.5'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
@@ -61,7 +60,7 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(17)
 }
 
-tasks.named('processResources', ProcessResources).configure {
+tasks.withType(ProcessResources).configureEach {
     inputs.property 'version', project.version
     filesMatching(['META-INF/mods.toml']) {
         expand version: project.version
@@ -77,7 +76,7 @@ jar {
                 'Implementation-Title'   : project.name,
                 'Implementation-Version' : project.version,
                 'Implementation-Vendor'  : 'Mewzica',
-                // NeoForge 也认 mods.toml 里的 [[mixins]]，但 manifest 这条更保险
+                // mods.toml 里也声明了 [[mixins]]，manifest 这条是双保险
                 'MixinConfigs'           : 'wes.mixins.json'
         ])
     }

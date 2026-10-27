@@ -1,6 +1,6 @@
 modLoader = "javafml"
-# NeoForge 20.4 的 javafml 是 2.x 一代（NeoForge 从 20.2 起独立版本号）
-loaderVersion = "[2,)"
+# NeoForge 20.4 的 javafml 是 2 一代；这里按官方 MDK 的写法放到最宽，两边都能加载
+loaderVersion = "[1,)"
 license = "MIT"
 issueTrackerURL = "https://github.com/Mewzica/World-Edit-Select/issues"
 
@@ -14,30 +14,30 @@ description = '''
 World Edit Select (WES) —— 在聊天框输入 //set （带空格）即可弹出方块选择面板，点选方块并分配百分比，一键生成 //set 指令。
 '''
 
+# NeoForge 解析 mods.toml 里的 [[mixins]] 段（Forge 1.20.1 不解析，只能写 manifest）。
+# 这里声明一份，build.gradle 的 jar {} 里也写了一份 MixinConfigs，双保险。
+[[mixins]]
+config = "wes.mixins.json"
+
 # NeoForge 从 20.2 起把加载器自己的 modId 从 forge 改成 neoforge
 [[dependencies.wes]]
 modId = "neoforge"
-mandatory = true
+type = "required"
 versionRange = "[20.4,)"
 ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.wes]]
 modId = "minecraft"
-mandatory = true
+type = "required"
 versionRange = "[1.20.4,1.20.5)"
 ordering = "NONE"
 side = "CLIENT"
 
-# WorldEdit 不是硬依赖：装是世界编辑器的语法糖入口，不装就只剩原版方块表。
+# WorldEdit 不是硬依赖：装了才走世界编辑器的语法糖入口，不装就只剩原版方块表。
 [[dependencies.wes]]
 modId = "worldedit"
-mandatory = false
+type = "optional"
 versionRange = "[7.2.0,)"
 ordering = "NONE"
 side = "CLIENT"
-
-# NeoForge 支持在 mods.toml 里直接声明 Mixin 配置（Forge 1.20.1 不支持，只能写 manifest）。
-# 两边都保留：manifest 那份由 build.gradle 的 jar {} 块写入，兼容性最好。
-[[mixins]]
-config = "wes.mixins.json"
