@@ -19,8 +19,9 @@ java {
 }
 
 neoForge {
-    // 目录里显式写 "1.20.4-20.4.237"：ModDevGradle 从版本号里自己拆 MC 版本
-    version = "${minecraft_version}-${neoforge_version}"
+    // 这里只写 NeoForge 自己的版本号（20.4.237）。ModDevGradle 解析的是
+    // net.neoforged:neoforge:<version>，加 "1.20.4-" 前缀会找不到坐标。
+    version = "${neoforge_version}"
 
     runs {
         client {
