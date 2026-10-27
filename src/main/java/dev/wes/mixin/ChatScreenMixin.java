@@ -2,6 +2,7 @@ package dev.wes.mixin;
 
 import dev.wes.chat.ChatPanelHolder;
 import dev.wes.chat.ChatPanelHooks;
+import dev.wes.chat.ChatToggle;
 import dev.wes.chat.ChatTrigger;
 import dev.wes.command.BlockCommand;
 import dev.wes.gui.ChatBlockPanel;
@@ -92,11 +93,22 @@ public abstract class ChatScreenMixin implements ChatPanelHolder {
     @Inject(method = "render", at = @At("TAIL"))
     private void wes$onRender(GuiGraphics graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
         ChatPanelHooks.render(this, graphics, mouseX, mouseY, partialTick);
+        // 开关单独画：面板关着的时候它也要在，而且必须压在最上层
+        ChatToggle.render(graphics, this.input, mouseX, mouseY);
     }
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void wes$onMouseClicked(double mouseX, double mouseY, int button,
                                     CallbackInfoReturnable<Boolean> cir) {
+        // 先判开关：它在面板之外，不能被「点面板外面就收起」那条逻辑吃掉
+        if (ChatToggle.mouseClicked(this.input, mouseX, mouseY, button)) {
+            if (!ChatToggle.isEnabled() && this.wes$isPanelOpen()) {
+                // 关掉开关时把已经开着的面板一并收起来，免得它悬在那没法再触发
+                this.wes$panel().close();
+            }
+            cir.setReturnValue(true);
+            return;
+        }
         if (ChatPanelHooks.mouseClicked(this, mouseX, mouseY, button)) {
             cir.setReturnValue(true);
         }
@@ -125,7 +137,9 @@ public abstract class ChatScreenMixin implements ChatPanelHolder {
 
         // 面板没开时的兜底：文本正好停在 "//set " / "//replace " / ... 又按了回车，
         // 别把这半截指令当命令发出去，改成打开面板。
-        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+        // 开关关掉时这条兜底也要让路：玩家就是想把这半截指令原样发出去。
+        if (ChatToggle.isEnabled()
+                && (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
                 && ChatTrigger.matches(this.input.getValue())) {
             ChatTrigger.check((ChatScreen) (Object) this, this.input.getValue());
             cir.setReturnValue(true);

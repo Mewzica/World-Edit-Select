@@ -1,5 +1,8 @@
 modLoader = "javafml"
-loaderVersion = "[47,)"
+# NeoForge 20.1（= 1.20.1-47.1.x）把自己的 javafml 版本改成了 24.x，
+# 而 Forge 47.2 那一代是 47.x。写死任何一个区间都会让另一边加载失败，
+# 所以这里放到最宽：本模组只用最基础的 FML 能力，不挑版本。
+loaderVersion = "[1,)"
 license = "MIT"
 issueTrackerURL = "https://github.com/Mewzica/World-Edit-Select/issues"
 

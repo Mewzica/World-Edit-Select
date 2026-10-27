@@ -48,13 +48,15 @@ mixin {
 }
 
 repositories {
+    // NeoForge 的 Maven 仓库。1.20.1 这一代的坐标是 net.neoforged:forge。
+    maven { name = 'NeoForged'; url = 'https://maven.neoforged.net/releases' }
     // WorldEdit 的 Maven 仓库（worldedit-core 就在这里）
     maven { name = 'EngineHub'; url = 'https://maven.enginehub.org/repo/' }
     mavenCentral()
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    minecraft "net.neoforged:forge:${minecraft_version}-${neoforge_version}"
 
     // 只需要 WorldEdit 的「核心 API」（BlockType / BlockFactory / Registry 等）。
     // 这些类与 Minecraft 版本无关，所以直接拿 worldedit-core 编译即可；
