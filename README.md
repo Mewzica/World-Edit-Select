@@ -10,6 +10,7 @@ It is not limited to `//set`. Every WorldEdit command that takes a block pattern
 
 ## Features
 
+- **Toggle switch** — a small switch sits just above the chat input. Leave it on and typing a command prefix opens the picker; turn it off and the chat box stays vanilla, so you can type `//set ` by hand without the panel jumping in.
 - **Trigger by typing** — the picker opens the moment the chat input is exactly a command prefix plus a space (`//set `, `//replace `, `//sphere `, …). No keybind, no command, no extra UI.
 - **Command-aware arguments** — the panel follows each command's real signature, so the fields appear in the right order: `//hollow <thickness> <pattern>` puts thickness *before* the pattern, `//cyl <pattern> <radius> <height>` puts it *after*, and `//replace <from> <pattern>` adds a "block to replace" picker.
 - **Stays in chat** — the panel is an overlay attached to the chat screen, not a separate screen. The chat history and the input line stay visible, and you can still see what people are saying.
@@ -60,15 +61,15 @@ It is not limited to `//set`. Every WorldEdit command that takes a block pattern
 
 | | |
 | --- | --- |
-| Minecraft | 1.20.1 |
+| Minecraft | 1.20.4 |
 | Loader | Fabric Loader 0.14+ |
 | Dependency | [WorldEdit](https://modrinth.com/mod/worldedit) 7.2+ (Fabric), client side |
 | Java | 17 |
 
 ## Installation
 
-1. Install Fabric Loader for Minecraft 1.20.1.
-2. Drop `worldedit-fabric` and `wes-<version>+mc1.20.1.jar` into `.minecraft/mods`.
+1. Install Fabric Loader for Minecraft 1.20.4.
+2. Drop `worldedit-fabric` and `wes-<version>+mc1.20.4.jar` into `.minecraft/mods`.
 3. Launch the game. No configuration needed.
 
 ## Building

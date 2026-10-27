@@ -1,5 +1,7 @@
 {
   "wes.title": "创世神选块",
+  "wes.toggle.on": "方块选择：开",
+  "wes.toggle.off": "方块选择：关",
   "wes.search": "搜索方块…",
   "wes.selected": "已选：%s",
   "wes.selected.empty": "点左侧方块加入列表。",

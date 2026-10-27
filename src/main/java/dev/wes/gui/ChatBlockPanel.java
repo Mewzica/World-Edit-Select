@@ -812,7 +812,9 @@ public final class ChatBlockPanel {
             if (index >= 0) {
                 TextFieldWidget field = this.percentWidgets.get(index);
                 this.setFocus(field);
-                field.setCursor(MathHelper.clamp(cursor, 0, field.getText().length()));
+                // 1.20.2 起 setCursor 多了第二个参数（是否保留选区锚点），
+                // 我们要的是「光标落回去、不选中任何东西」，所以传 false。
+                field.setCursor(MathHelper.clamp(cursor, 0, field.getText().length()), false);
                 return;
             }
         }
@@ -939,7 +941,8 @@ public final class ChatBlockPanel {
 
         // 只回填，不发送 —— 玩家自己按回车，还能继续改
         this.chatField.setText(result);
-        this.chatField.setCursorToEnd();
+        // 同上：1.20.4 的 setCursorToEnd 要一个「是否选中」的布尔值
+        this.chatField.setCursorToEnd(false);
         this.close();
     }
 
