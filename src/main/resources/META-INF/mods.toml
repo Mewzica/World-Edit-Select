@@ -1,5 +1,5 @@
 modLoader = "javafml"
-loaderVersion = "[47,)"
+loaderVersion = "[49,)"
 license = "MIT"
 issueTrackerURL = "https://github.com/Mewzica/World-Edit-Select/issues"
 
@@ -16,14 +16,14 @@ World Edit Select (WES) —— 在聊天框输入 //set （带空格）即可弹
 [[dependencies.wes]]
 modId = "forge"
 mandatory = true
-versionRange = "[47,)"
+versionRange = "[49,)"
 ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.wes]]
 modId = "minecraft"
 mandatory = true
-versionRange = "[1.20.1,1.20.2)"
+versionRange = "[1.20.4,1.20.5)"
 ordering = "NONE"
 side = "CLIENT"
 
